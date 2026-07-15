@@ -422,12 +422,50 @@ create policy "Users can insert their own profile"
 
 create policy "Users can update their own profile"
   on profiles for update
-  using ( auth.uid() = id );</pre>
+  using ( auth.uid() = id );
+
+create table messages (
+  id uuid default gen_random_uuid() primary key,
+  sender_id uuid references auth.users on delete cascade not null,
+  receiver_id uuid references auth.users on delete cascade not null,
+  content text not null,
+  read boolean default false,
+  created_at timestamptz default now()
+);
+
+alter table messages enable row level security;
+
+create policy "Users can send messages as themselves"
+  on messages for insert
+  with check ( sender_id = auth.uid() );
+
+create policy "Users can view their own conversations"
+  on messages for select
+  using ( sender_id = auth.uid() or receiver_id = auth.uid() );
+
+create policy "Users can mark their received messages as read"
+  on messages for update
+  using ( receiver_id = auth.uid() );</pre>
         <p>3. בתפריט הצד: <code>Storage</code> → <code>New bucket</code> → שם הדלי: <code>avatars</code> → סמנו <b>Public bucket</b> → Create.</p>
-        <p>4. בתפריט הצד: <code>Settings → API</code>, העתיקו את ה-<code>Project URL</code> ואת ה-<code>anon public</code> key.</p>
-        <p>5. הדביקו אותם כאן בקובץ <code>index.html</code> בראש קטע ה-JS:</p>
+        <p>4. עדיין ב-Storage, לכו לטאב <code>Policies</code> והריצו ב-SQL Editor גם את חוקי ההעלאה:</p>
+        <pre>create policy "Authenticated users can upload avatars"
+  on storage.objects for insert
+  to authenticated
+  with check ( bucket_id = 'avatars' );
+
+create policy "Authenticated users can update their avatars"
+  on storage.objects for update
+  to authenticated
+  using ( bucket_id = 'avatars' );
+
+create policy "Anyone can view avatars"
+  on storage.objects for select
+  to public
+  using ( bucket_id = 'avatars' );</pre>
+        <p>5. בתפריט הצד: <code>Settings → API</code>, העתיקו את ה-<code>Project URL</code> ואת ה-<code>anon public</code> key.</p>
+        <p>6. הדביקו אותם כאן בקובץ <code>index.html</code> בראש קטע ה-JS:</p>
         <pre>const SUPABASE_URL = "https://xxxx.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOि...";</pre>
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIs...";</pre>
         <p>לאחר השמירה רענן את הדף — האפליקציה תעלה אוטומטית.</p>
       </div>
     </div>`;
@@ -445,12 +483,32 @@ if (CONFIG_IS_PLACEHOLDER){
   let currentDoc  = null;   // profiles row for the current user
   let allSitters  = [];     // cached babysitter list for the parent feed
   let pendingPhotoFile = null;
+  let currentView = 'main';       // 'main' | 'messages' | 'thread'
+  let sitterViewMode = 'view';    // 'view' | 'edit' — only relevant once a babysitter profile is complete
+  let activeThreadUserId = null;
+  let activeThreadProfile = null;
+  let unreadCount = 0;
 
   /* ============================================================
      3) SHELL / NAV
      ============================================================ */
   function renderShell(innerHtml, opts={}){
     const showNav = !!currentUser && !opts.hideNav;
+    const role = currentDoc?.role;
+    let navButtons = '';
+    if (showNav && role === 'babysitter' && currentDoc?.name){
+      navButtons = `
+        <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">הפרופיל שלי</button>
+        <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
+          הודעות ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}
+        </button>`;
+    } else if (showNav && role === 'parent' && currentDoc?.name){
+      navButtons = `
+        <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">בייביסיטרים</button>
+        <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
+          ההודעות שלי ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}
+        </button>`;
+    }
     app.innerHTML = `
       ${showNav ? `
       <div class="topbar">
@@ -460,6 +518,7 @@ if (CONFIG_IS_PLACEHOLDER){
             <div class="brand-name">בייבי<em>לינק</em></div>
           </div>
           <div class="topbar-actions">
+            ${navButtons}
             ${currentDoc?.role ? `<span class="pill-role">${currentDoc.role === 'parent' ? 'הורה' : 'בייביסיטר'}</span>` : ''}
             <button class="btn btn-text" id="btn-signout">התנתקות</button>
           </div>
@@ -470,7 +529,12 @@ if (CONFIG_IS_PLACEHOLDER){
     `;
     if (showNav){
       document.getElementById('btn-signout').onclick = () => sb.auth.signOut();
+      const navProfile = document.getElementById('nav-profile');
+      const navMessages = document.getElementById('nav-messages');
+      if (navProfile) navProfile.onclick = () => { currentView='main'; sitterViewMode='view'; route(); };
+      if (navMessages) navMessages.onclick = () => { currentView='messages'; route(); };
     }
+    if (showNav) refreshUnreadCount();
   }
 
   function renderLoader(msg='טוען...'){
@@ -617,11 +681,12 @@ if (CONFIG_IS_PLACEHOLDER){
      ============================================================ */
   function renderSitterForm(){
     const d = currentDoc || {};
+    const isEditing = !!d.name;
     pendingPhotoFile = null;
     renderShell(`
       <div class="view-narrow">
-        <div class="eyebrow">שלב 2 מתוך 2</div>
-        <h1 class="page-title">בניית הפרופיל שלך</h1>
+        <div class="eyebrow">${isEditing ? 'עריכת פרופיל' : 'שלב 2 מתוך 2'}</div>
+        <h1 class="page-title">${isEditing ? 'עריכת הפרופיל שלך' : 'בניית הפרופיל שלך'}</h1>
         <p class="page-sub">הפרטים האלה יוצגו להורים באזור שלך. ככל שהפרופיל מלא יותר — כך קל יותר להורים לבחור בכם.</p>
 
         <div class="photo-upload">
@@ -672,9 +737,14 @@ if (CONFIG_IS_PLACEHOLDER){
             <textarea id="s-bio" placeholder="ניסיון, גילאים שאיתם עבדתם, זמינות, המלצות..." required>${escapeHtml(d.bio)}</textarea>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="sitter-submit">שמירת הפרופיל</button>
+          ${isEditing ? '<button type="button" class="btn btn-ghost btn-block" id="sitter-cancel" style="margin-top:10px;">ביטול</button>' : ''}
         </form>
       </div>
     `);
+
+    if (isEditing){
+      document.getElementById('sitter-cancel').onclick = () => { sitterViewMode = 'view'; route(); };
+    }
 
     document.getElementById('photo-input').onchange = (e) => {
       const file = e.target.files[0];
@@ -755,6 +825,7 @@ if (CONFIG_IS_PLACEHOLDER){
         const { error } = await sb.from('profiles').update(payload).eq('id', currentUser.id);
         if (error) throw error;
         currentDoc = { ...currentDoc, ...payload };
+        sitterViewMode = 'view';
         toast('הפרופיל נשמר בהצלחה!');
         route();
       } catch (err){
@@ -762,6 +833,71 @@ if (CONFIG_IS_PLACEHOLDER){
         errEl.classList.add('show');
         btn.disabled = false;
         btn.textContent = 'שמירת הפרופיל';
+      }
+    };
+  }
+
+  /* ============================================================
+     6b) BABYSITTER — READ-ONLY PROFILE VIEW
+     ============================================================ */
+  function renderSitterProfileView(){
+    const d = currentDoc || {};
+    renderShell(`
+      <div class="view-narrow">
+        <div class="eyebrow">הפרופיל שלי</div>
+        <h1 class="page-title">כך ההורים רואים אותך</h1>
+        <p class="page-sub">זו התצוגה הציבורית של הפרופיל שלך בפיד להורים.</p>
+        <div class="sitter-card" style="cursor:default;">
+          <div class="photo">${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}">` : initials(d.name)}</div>
+          <div class="body">
+            <h3>${escapeHtml(d.name)}</h3>
+            <div class="loc">📍 ${escapeHtml(d.city||'')}</div>
+            <p class="bio-preview" style="-webkit-line-clamp:initial;">${escapeHtml(d.bio||'')}</p>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-edit-profile" style="margin-top:22px;">עריכת פרופיל</button>
+      </div>
+    `);
+    document.getElementById('btn-edit-profile').onclick = () => { sitterViewMode = 'edit'; route(); };
+  }
+
+  /* ============================================================
+     6c) PARENT — ONE-TIME NAME SETUP (so sitters know who's messaging them)
+     ============================================================ */
+  function renderParentNameSetup(){
+    renderShell(`
+      <div class="view-narrow">
+        <div class="eyebrow">שלב אחרון</div>
+        <h1 class="page-title">איך לקרוא לך?</h1>
+        <p class="page-sub">השם הזה יוצג לבייביסיטרים כשתשלחו הודעה דרך האפליקציה.</p>
+        <div class="form-error" id="parent-name-error"></div>
+        <form id="parent-name-form">
+          <div class="field">
+            <label for="p-name">שם מלא</label>
+            <input type="text" id="p-name" placeholder="לדוגמה: דנה לוי" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="parent-name-submit">המשך</button>
+        </form>
+      </div>
+    `, { hideNav:true });
+    document.getElementById('parent-name-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('parent-name-error');
+      const btn = document.getElementById('parent-name-submit');
+      errEl.classList.remove('show');
+      const name = document.getElementById('p-name').value.trim();
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const { error } = await sb.from('profiles').update({ name }).eq('id', currentUser.id);
+        if (error) throw error;
+        currentDoc = { ...currentDoc, name };
+        route();
+      } catch(err){
+        errEl.textContent = 'השמירה נכשלה: ' + (err?.message || 'שגיאה לא ידועה');
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'המשך';
       }
     };
   }
@@ -850,11 +986,174 @@ if (CONFIG_IS_PLACEHOLDER){
             <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
             <a class="btn btn-ghost" style="flex:1;" href="https://wa.me/${normalizePhone(s.phone)}" target="_blank" rel="noopener">💬 וואטסאפ</a>
           </div>
+          <button class="btn btn-ghost btn-block" id="modal-msg-btn" style="margin-top:10px;">✉️ שליחת הודעה באפליקציה</button>
         </div>
       </div>`;
     document.body.appendChild(backdrop);
     backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
     backdrop.querySelector('#modal-close').onclick = () => backdrop.remove();
+    backdrop.querySelector('#modal-msg-btn').onclick = () => {
+      backdrop.remove();
+      activeThreadUserId = s.id;
+      activeThreadProfile = s;
+      currentView = 'thread';
+      route();
+    };
+  }
+
+  /* ============================================================
+     7b) MESSAGING — inbox + thread view
+     ============================================================ */
+  async function refreshUnreadCount(){
+    try {
+      const { count, error } = await sb.from('messages')
+        .select('id', { count:'exact', head:true })
+        .eq('receiver_id', currentUser.id)
+        .eq('read', false);
+      if (error) throw error;
+      unreadCount = count || 0;
+      const badgeHost = document.getElementById('nav-messages');
+      if (badgeHost){
+        badgeHost.innerHTML = `${currentDoc.role === 'babysitter' ? 'הודעות' : 'ההודעות שלי'} ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}`;
+      }
+    } catch(err){ /* silent — badge just won't update */ }
+  }
+
+  async function fetchConversations(){
+    const { data, error } = await sb.from('messages')
+      .select('*')
+      .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+      .order('created_at', { ascending:false });
+    if (error) throw error;
+
+    const map = new Map();
+    for (const m of data){
+      const otherId = m.sender_id === currentUser.id ? m.receiver_id : m.sender_id;
+      if (!map.has(otherId)){
+        map.set(otherId, { otherId, lastMessage:m, unread:0 });
+      }
+      if (m.receiver_id === currentUser.id && !m.read){
+        map.get(otherId).unread += 1;
+      }
+    }
+    const convos = Array.from(map.values());
+    if (!convos.length) return convos;
+
+    const ids = convos.map(c => c.otherId);
+    const { data: profs, error: profErr } = await sb.from('profiles').select('id,name,photo_url,role').in('id', ids);
+    if (profErr) throw profErr;
+    const profMap = new Map(profs.map(p => [p.id, p]));
+    convos.forEach(c => { c.profile = profMap.get(c.otherId) || { name:'משתמש' }; });
+    return convos;
+  }
+
+  async function renderMessagesInbox(){
+    renderShell(`
+      <div class="eyebrow">${currentDoc.role === 'babysitter' ? 'תיבת הודעות' : 'ההודעות שלי'}</div>
+      <h1 class="page-title">שיחות</h1>
+      <div id="inbox-wrap"><div class="page-loader"><div class="spinner"></div><span>טוען שיחות...</span></div></div>
+    `);
+    let convos = [];
+    try {
+      convos = await fetchConversations();
+    } catch(err){
+      document.getElementById('inbox-wrap').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>לא הצלחנו לטעון את ההודעות</h3><p>נסו לרענן את הדף.</p></div>`;
+      return;
+    }
+    const wrap = document.getElementById('inbox-wrap');
+    if (!convos.length){
+      wrap.innerHTML = `<div class="empty-state"><div class="icon">✉️</div><h3>עדיין אין הודעות</h3><p>${currentDoc.role === 'parent' ? 'שלחו הודעה לבייביסיטר מתוך הפרופיל שלו/ה בפיד.' : 'הורים שיפנו אליכם יופיעו כאן.'}</p></div>`;
+      return;
+    }
+    wrap.innerHTML = convos.map(c => `
+      <div class="sitter-card" data-id="${c.otherId}" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; margin-bottom:12px; cursor:pointer;">
+        <div class="photo" style="width:54px; height:54px; aspect-ratio:1; border-radius:50%; flex-shrink:0;">
+          ${c.profile.photo_url ? `<img src="${c.profile.photo_url}" alt="">` : initials(c.profile.name)}
+        </div>
+        <div style="flex:1; overflow:hidden;">
+          <h3 style="margin-bottom:2px;">${escapeHtml(c.profile.name || 'משתמש')}</h3>
+          <p class="bio-preview" style="-webkit-line-clamp:1;">${escapeHtml(c.lastMessage.content)}</p>
+        </div>
+        ${c.unread > 0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:2px 9px;font-size:12px;flex-shrink:0;">${c.unread}</span>` : ''}
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-id]').forEach(el => {
+      el.onclick = () => {
+        const convo = convos.find(c => c.otherId === el.dataset.id);
+        activeThreadUserId = convo.otherId;
+        activeThreadProfile = convo.profile;
+        currentView = 'thread';
+        route();
+      };
+    });
+  }
+
+  async function renderMessageThread(){
+    const otherId = activeThreadUserId;
+    let otherProfile = activeThreadProfile;
+    renderShell(`
+      <div class="view-narrow">
+        <button class="btn btn-text" id="thread-back" style="padding:0 0 14px;">→ חזרה לשיחות</button>
+        <div class="eyebrow">שיחה עם</div>
+        <h1 class="page-title">${escapeHtml(otherProfile?.name || 'משתמש')}</h1>
+        <div id="thread-messages" style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px; max-height:50vh; overflow-y:auto; padding:4px;">
+          <div class="page-loader" style="min-height:20vh;"><div class="spinner"></div></div>
+        </div>
+        <form id="thread-form" style="display:flex; gap:10px;">
+          <input type="text" id="thread-input" placeholder="כתבו הודעה..." style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 14px; font-size:15px;" required>
+          <button type="submit" class="btn btn-primary" id="thread-send">שליחה</button>
+        </form>
+      </div>
+    `);
+    document.getElementById('thread-back').onclick = () => { currentView = 'messages'; route(); };
+
+    async function loadMessages(){
+      const { data, error } = await sb.from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${currentUser.id})`)
+        .order('created_at', { ascending:true });
+      if (error) throw error;
+      const box = document.getElementById('thread-messages');
+      if (!box) return;
+      if (!data.length){
+        box.innerHTML = `<div class="empty-state" style="padding:40px 20px;"><p>עדיין אין הודעות בשיחה הזו — כתבו את ההודעה הראשונה!</p></div>`;
+      } else {
+        box.innerHTML = data.map(m => {
+          const mine = m.sender_id === currentUser.id;
+          return `<div style="align-self:${mine?'flex-end':'flex-start'}; max-width:75%; background:${mine?'var(--violet)':'var(--surface-2)'}; color:${mine?'#fff':'var(--text)'}; border-radius:14px; padding:10px 14px; font-size:14.5px; line-height:1.5;">${escapeHtml(m.content)}</div>`;
+        }).join('');
+        box.scrollTop = box.scrollHeight;
+      }
+      // mark incoming messages as read
+      const unreadIds = data.filter(m => m.receiver_id === currentUser.id && !m.read).map(m => m.id);
+      if (unreadIds.length){
+        await sb.from('messages').update({ read:true }).in('id', unreadIds);
+        refreshUnreadCount();
+      }
+    }
+
+    try { await loadMessages(); } catch(err){
+      const box = document.getElementById('thread-messages');
+      if (box) box.innerHTML = `<div class="empty-state"><p>שגיאה בטעינת ההודעות.</p></div>`;
+    }
+
+    document.getElementById('thread-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('thread-input');
+      const content = input.value.trim();
+      if (!content) return;
+      const btn = document.getElementById('thread-send');
+      btn.disabled = true;
+      try {
+        const { error } = await sb.from('messages').insert({ sender_id: currentUser.id, receiver_id: otherId, content });
+        if (error) throw error;
+        input.value = '';
+        await loadMessages();
+      } catch(err){
+        toast('שליחת ההודעה נכשלה', true);
+      }
+      btn.disabled = false;
+    };
   }
 
   /* ============================================================
@@ -877,7 +1176,17 @@ if (CONFIG_IS_PLACEHOLDER){
   function route(){
     if (!currentUser){ renderAuth(); return; }
     if (!currentDoc || currentDoc.role == null){ renderRoleSelect(); return; }
-    if (currentDoc.role === 'babysitter'){ renderSitterForm(); return; } // sitters can keep editing their own profile
+
+    if (currentDoc.role === 'babysitter' && !currentDoc.name){ renderSitterForm(); return; } // first-time setup
+    if (currentDoc.role === 'parent' && !currentDoc.name){ renderParentNameSetup(); return; } // first-time setup
+
+    if (currentView === 'messages'){ renderMessagesInbox(); return; }
+    if (currentView === 'thread'){ renderMessageThread(); return; }
+
+    if (currentDoc.role === 'babysitter'){
+      if (sitterViewMode === 'edit'){ renderSitterForm(); } else { renderSitterProfileView(); }
+      return;
+    }
     if (currentDoc.role === 'parent'){ renderParentFeed(); return; }
     renderRoleSelect();
   }
