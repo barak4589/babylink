@@ -1,20 +1,6 @@
-create policy "Users can upload their own avatar"
+drop policy if exists "Users can upload their own avatar" on storage.objects;
+
+create policy "Authenticated users can upload avatars"
 on storage.objects for insert
 to authenticated
-with check (
-  bucket_id = 'avatars'
-  and name = auth.uid()::text || '.jpg'
-);
-
-create policy "Users can update their own avatar"
-on storage.objects for update
-to authenticated
-using (
-  bucket_id = 'avatars'
-  and name = auth.uid()::text || '.jpg'
-);
-
-create policy "Anyone can view avatars"
-on storage.objects for select
-to public
-using ( bucket_id = 'avatars' );
+with check ( bucket_id = 'avatars' );
