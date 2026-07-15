@@ -488,6 +488,7 @@ if (CONFIG_IS_PLACEHOLDER){
   let activeThreadUserId = null;
   let activeThreadProfile = null;
   let unreadCount = 0;
+  let viewedSitter = null;   // full profile data for the sitter detail page
 
   /* ============================================================
      3) SHELL / NAV
@@ -826,7 +827,7 @@ if (CONFIG_IS_PLACEHOLDER){
         if (error) throw error;
         currentDoc = { ...currentDoc, ...payload };
         sitterViewMode = 'view';
-        toast('הפרופיל נשמר בהצלחה!');
+        toast(isEditing ? 'הפרופיל נשמר בהצלחה!' : 'נרשמת בהצלחה! עכשיו הורים באזור יוכלו לראות את הפרופיל שלך ולפנות אליך.');
         route();
       } catch (err){
         errEl.textContent = 'שמירת הפרופיל נכשלה: ' + (err?.message || err?.error_description || 'שגיאה לא ידועה') + (err?.hint ? ' — ' + err.hint : '');
@@ -965,35 +966,41 @@ if (CONFIG_IS_PLACEHOLDER){
       `).join('')}
     </div>`;
     wrap.querySelectorAll('.sitter-card').forEach(card => {
-      card.onclick = () => openSitterModal(list[+card.dataset.idx]);
+      card.onclick = () => goToSitterDetail(list[+card.dataset.idx]);
     });
   }
 
-  function openSitterModal(s){
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
-    backdrop.innerHTML = `
-      <div class="modal">
-        <div class="modal-photo">
-          <button class="modal-close" id="modal-close">✕</button>
-          ${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}
-        </div>
-        <div class="modal-body">
-          <h2>${escapeHtml(s.name)}</h2>
-          <div class="modal-loc">📍 ${escapeHtml(s.city||'')}</div>
-          <p class="modal-bio">${escapeHtml(s.bio||'')}</p>
-          <div class="modal-actions">
-            <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
-            <a class="btn btn-ghost" style="flex:1;" href="https://wa.me/${normalizePhone(s.phone)}" target="_blank" rel="noopener">💬 וואטסאפ</a>
+  function goToSitterDetail(s){
+    viewedSitter = s;
+    currentView = 'sitter-detail';
+    route();
+  }
+
+  function renderSitterDetailPage(){
+    const s = viewedSitter;
+    if (!s){ currentView = 'main'; route(); return; }
+    renderShell(`
+      <div class="view-narrow" style="max-width:560px;">
+        <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
+        <div class="modal" style="box-shadow:none; max-width:100%;">
+          <div class="modal-photo">
+            ${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}
           </div>
-          <button class="btn btn-ghost btn-block" id="modal-msg-btn" style="margin-top:10px;">✉️ שליחת הודעה באפליקציה</button>
+          <div class="modal-body">
+            <h2>${escapeHtml(s.name)}</h2>
+            <div class="modal-loc">📍 ${escapeHtml(s.city||'')}</div>
+            <p class="modal-bio">${escapeHtml(s.bio||'')}</p>
+            <div class="modal-actions">
+              <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
+              <a class="btn btn-ghost" style="flex:1;" href="https://wa.me/${normalizePhone(s.phone)}" target="_blank" rel="noopener">💬 וואטסאפ</a>
+            </div>
+            <button class="btn btn-ghost btn-block" id="detail-msg-btn" style="margin-top:10px;">✉️ שליחת הודעה באפליקציה</button>
+          </div>
         </div>
-      </div>`;
-    document.body.appendChild(backdrop);
-    backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
-    backdrop.querySelector('#modal-close').onclick = () => backdrop.remove();
-    backdrop.querySelector('#modal-msg-btn').onclick = () => {
-      backdrop.remove();
+      </div>
+    `);
+    document.getElementById('detail-back').onclick = () => { currentView = 'main'; route(); };
+    document.getElementById('detail-msg-btn').onclick = () => {
       activeThreadUserId = s.id;
       activeThreadProfile = s;
       currentView = 'thread';
@@ -1182,6 +1189,7 @@ if (CONFIG_IS_PLACEHOLDER){
 
     if (currentView === 'messages'){ renderMessagesInbox(); return; }
     if (currentView === 'thread'){ renderMessageThread(); return; }
+    if (currentView === 'sitter-detail'){ renderSitterDetailPage(); return; }
 
     if (currentDoc.role === 'babysitter'){
       if (sitterViewMode === 'edit'){ renderSitterForm(); } else { renderSitterProfileView(); }
