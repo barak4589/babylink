@@ -19,22 +19,22 @@
    Signature: interlocking twin-ring "link" mark — echoes parent↔sitter connection
    ============================================================ */
 :root{
-  --bg:            #0B0910;
-  --bg-soft:       #120F1B;
-  --surface:       #17131F;
-  --surface-2:     #1F1829;
-  --border:        #2B2438;
-  --border-soft:   #211B2C;
-  --violet:        #8B5CF6;
-  --violet-deep:   #6D28D9;
-  --violet-bright: #A78BFA;
-  --lavender:      #C9BCF5;
-  --text:          #F3EFFB;
-  --text-muted:    #9A92AF;
-  --text-faint:    #6E6683;
-  --success:       #34D399;
-  --danger:        #F97066;
-  --shadow:        0 20px 50px -20px rgba(0,0,0,.6);
+  --bg:            #FFFFFF;
+  --bg-soft:       #F7F5FC;
+  --surface:       #FFFFFF;
+  --surface-2:     #F3EFFC;
+  --border:        #E4DFF0;
+  --border-soft:   #ECE8F5;
+  --violet:        #7C3AED;
+  --violet-deep:   #6425C4;
+  --violet-bright: #8B5CF6;
+  --lavender:      #6D28D9;
+  --text:          #1E1A29;
+  --text-muted:    #6B647F;
+  --text-faint:    #A79FBA;
+  --success:       #16A34A;
+  --danger:        #DC2626;
+  --shadow:        0 20px 45px -22px rgba(76,29,149,.18);
   --radius-lg:     22px;
   --radius-md:     14px;
   --radius-sm:     9px;
@@ -47,8 +47,8 @@
 html{ scroll-behavior:smooth; }
 body{
   background:
-    radial-gradient(1100px 600px at 85% -10%, rgba(139,92,246,.16), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(109,40,217,.14), transparent 60%),
+    radial-gradient(1100px 600px at 85% -10%, rgba(139,92,246,.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(109,40,217,.05), transparent 60%),
     var(--bg);
   color:var(--text);
   font-family:var(--font-body);
@@ -81,7 +81,7 @@ a{ color:inherit; }
 /* ---------- Top bar ---------- */
 .topbar{
   position:sticky; top:0; z-index:40;
-  background:rgba(11,9,16,.82); backdrop-filter:blur(14px);
+  background:rgba(255,255,255,.82); backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border-soft);
 }
 .topbar-inner{
@@ -145,8 +145,8 @@ h1.page-title{
 .auth-shell::before{
   content:''; position:absolute; inset:-20%;
   background:
-    radial-gradient(420px 320px at 20% 20%, rgba(139,92,246,.20), transparent 60%),
-    radial-gradient(380px 300px at 85% 80%, rgba(167,139,250,.16), transparent 60%);
+    radial-gradient(420px 320px at 20% 20%, rgba(139,92,246,.10), transparent 60%),
+    radial-gradient(380px 300px at 85% 80%, rgba(167,139,250,.08), transparent 60%);
   filter:blur(10px); pointer-events:none;
 }
 .auth-card{
@@ -168,7 +168,7 @@ h1.page-title{
   transition:border-color .15s ease, background .15s ease;
 }
 .field input::placeholder, .field textarea::placeholder{ color:var(--text-faint); }
-.field input:focus, .field textarea:focus{ border-color:var(--violet); background:#1B1626; outline:none; }
+.field input:focus, .field textarea:focus{ border-color:var(--violet); background:#FDFCFF; outline:none; }
 .field textarea{ resize:vertical; min-height:96px; }
 .field-hint{ font-size:12px; color:var(--text-faint); margin-top:6px; }
 
@@ -245,7 +245,7 @@ h1.page-title{
 }
 .sitter-card:hover{ transform:translateY(-4px); border-color:var(--violet); box-shadow:var(--shadow); }
 .sitter-card .photo{
-  width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#241C33,#150F1F);
+  width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#F3EEFF,#EAE1FB);
   display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
   font-size:34px; color:var(--violet-bright); overflow:hidden;
 }
@@ -261,8 +261,8 @@ h1.page-title{
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
 }
 .badge-link{
-  position:absolute; top:12px; left:12px; background:rgba(11,9,16,.75); backdrop-filter:blur(6px);
-  border:1px solid rgba(167,139,250,.4); color:var(--lavender); font-family:var(--font-mono);
+  position:absolute; top:12px; left:12px; background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
+  border:1px solid rgba(124,58,237,.3); color:var(--lavender); font-family:var(--font-mono);
   font-size:10.5px; padding:4px 9px; border-radius:100px; display:flex; align-items:center; gap:5px;
 }
 .badge-link .dot{ width:6px; height:6px; border-radius:50%; background:var(--success); }
@@ -285,7 +285,7 @@ h1.page-title{
   box-shadow:var(--shadow);
 }
 .modal-photo{
-  width:100%; aspect-ratio:16/10; background:linear-gradient(135deg,#241C33,#150F1F);
+  width:100%; aspect-ratio:16/10; background:linear-gradient(135deg,#F3EEFF,#EAE1FB);
   display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
   font-size:52px; color:var(--violet-bright); position:relative; overflow:hidden;
 }
@@ -403,7 +403,10 @@ function renderSetupNotice(){
   phone text default '',
   bio text default '',
   photo_url text default '',
-  location text default '',
+  id_number text default '',
+  birth_date date,
+  address text default '',
+  city text default '',
   created_at timestamptz default now()
 );
 
@@ -424,7 +427,7 @@ create policy "Users can update their own profile"
         <p>4. בתפריט הצד: <code>Settings → API</code>, העתיקו את ה-<code>Project URL</code> ואת ה-<code>anon public</code> key.</p>
         <p>5. הדביקו אותם כאן בקובץ <code>index.html</code> בראש קטע ה-JS:</p>
         <pre>const SUPABASE_URL = "https://xxxx.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIs...";</pre>
+const SUPABASE_ANON_KEY = "eyJhbGciOि...";</pre>
         <p>לאחר השמירה רענן את הדף — האפליקציה תעלה אוטומטית.</p>
       </div>
     </div>`;
@@ -532,7 +535,8 @@ if (CONFIG_IS_PLACEHOLDER){
             if (error) throw error;
             if (data.user){
               const { error: insErr } = await sb.from('profiles').insert({
-                id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'', location:''
+                id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'',
+                id_number:'', birth_date:null, address:'', city:''
               });
               // ignore duplicate-row errors (e.g. row already created by a trigger)
               if (insErr && insErr.code !== '23505') throw insErr;
@@ -642,8 +646,22 @@ if (CONFIG_IS_PLACEHOLDER){
             <input type="tel" id="s-phone" placeholder="050-1234567" value="${escapeAttr(d.phone)}" required>
           </div>
           <div class="field">
-            <label for="s-location">אזור מגורים</label>
-            <input type="text" id="s-location" placeholder="לדוגמה: שכונה ד', באר שבע" value="${escapeAttr(d.location)}" required>
+            <label for="s-id-number">תעודת זהות</label>
+            <input type="text" id="s-id-number" inputmode="numeric" placeholder="000000000" value="${escapeAttr(d.id_number)}" required>
+            <div class="field-hint">🔒 לשימוש פנימי לאימות זהות בלבד — לא יוצג להורים.</div>
+          </div>
+          <div class="field">
+            <label for="s-birth-date">תאריך לידה</label>
+            <input type="date" id="s-birth-date" value="${escapeAttr(d.birth_date)}" required>
+          </div>
+          <div class="field">
+            <label for="s-address">כתובת מגורים</label>
+            <input type="text" id="s-address" placeholder="לדוגמה: הרצל 12" value="${escapeAttr(d.address)}" required>
+            <div class="field-hint">🔒 הכתובת המדויקת נשמרת פרטית ולא מוצגת להורים — רק העיר תוצג בפרופיל הציבורי.</div>
+          </div>
+          <div class="field">
+            <label for="s-city">עיר</label>
+            <input type="text" id="s-city" placeholder="לדוגמה: באר שבע" value="${escapeAttr(d.city)}" required>
           </div>
           <div class="field">
             <label for="s-bio">קצת עליי (Bio)</label>
@@ -685,7 +703,10 @@ if (CONFIG_IS_PLACEHOLDER){
         const payload = {
           name: document.getElementById('s-name').value.trim(),
           phone: document.getElementById('s-phone').value.trim(),
-          location: document.getElementById('s-location').value.trim(),
+          id_number: document.getElementById('s-id-number').value.trim(),
+          birth_date: document.getElementById('s-birth-date').value,
+          address: document.getElementById('s-address').value.trim(),
+          city: document.getElementById('s-city').value.trim(),
           bio: document.getElementById('s-bio').value.trim(),
           photo_url,
           role: 'babysitter'
@@ -736,7 +757,7 @@ if (CONFIG_IS_PLACEHOLDER){
     document.getElementById('sitter-search').oninput = (e) => {
       const q = e.target.value.trim().toLowerCase();
       const filtered = allSitters.filter(s =>
-        s.name.toLowerCase().includes(q) || (s.location||'').toLowerCase().includes(q)
+        s.name.toLowerCase().includes(q) || (s.city||'').toLowerCase().includes(q)
       );
       paintSitterGrid(filtered);
     };
@@ -760,7 +781,7 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="photo">${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}</div>
           <div class="body">
             <h3>${escapeHtml(s.name)}</h3>
-            <div class="loc">📍 ${escapeHtml(s.location||'')}</div>
+            <div class="loc">📍 ${escapeHtml(s.city||'')}</div>
             <p class="bio-preview">${escapeHtml(s.bio||'')}</p>
           </div>
         </div>
@@ -782,7 +803,7 @@ if (CONFIG_IS_PLACEHOLDER){
         </div>
         <div class="modal-body">
           <h2>${escapeHtml(s.name)}</h2>
-          <div class="modal-loc">📍 ${escapeHtml(s.location||'')}</div>
+          <div class="modal-loc">📍 ${escapeHtml(s.city||'')}</div>
           <p class="modal-bio">${escapeHtml(s.bio||'')}</p>
           <div class="modal-actions">
             <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
