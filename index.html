@@ -170,7 +170,7 @@ h1.page-title{
 .field input::placeholder, .field textarea::placeholder{ color:var(--text-faint); }
 .field input:focus, .field textarea:focus{ border-color:var(--violet); background:#FDFCFF; outline:none; }
 .field textarea{ resize:vertical; min-height:96px; }
-.field-hint{ font-size:12px; color:var(--text-faint); margin-top:6px; }
+.field-hint{ font-size:12.5px; color:var(--text-muted); font-weight:600; margin-top:6px; }
 
 .tab-switch{
   display:flex; background:var(--bg-soft); border:1px solid var(--border);
@@ -700,7 +700,7 @@ if (CONFIG_IS_PLACEHOLDER){
     monthSel.innerHTML = '<option value="">חודש</option>' +
       HEBREW_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
     yearSel.innerHTML = '<option value="">שנה</option>' +
-      Array.from({length:85}, (_,i)=>thisYear-14-i).map(y=>`<option value="${y}">${y}</option>`).join('');
+      Array.from({length:100}, (_,i)=>thisYear-14-i).map(y=>`<option value="${y}">${y}</option>`).join('');
 
     if (d.birth_date){
       const [by, bm, bd] = String(d.birth_date).split('-');
