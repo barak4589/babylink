@@ -651,8 +651,12 @@ if (CONFIG_IS_PLACEHOLDER){
             <div class="field-hint">🔒 לשימוש פנימי לאימות זהות בלבד — לא יוצג להורים.</div>
           </div>
           <div class="field">
-            <label for="s-birth-date">תאריך לידה</label>
-            <input type="date" id="s-birth-date" value="${escapeAttr(d.birth_date)}" required>
+            <label for="s-birth-day">תאריך לידה</label>
+            <div style="display:flex; gap:8px;">
+              <select id="s-birth-day" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+              <select id="s-birth-month" required style="flex:1.4; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+              <select id="s-birth-year" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+            </div>
           </div>
           <div class="field">
             <label for="s-address">כתובת מגורים</label>
@@ -684,11 +688,48 @@ if (CONFIG_IS_PLACEHOLDER){
       reader.readAsDataURL(file);
     };
 
+    /* ---- populate day / month / year selects ---- */
+    const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+    const daySel = document.getElementById('s-birth-day');
+    const monthSel = document.getElementById('s-birth-month');
+    const yearSel = document.getElementById('s-birth-year');
+    const thisYear = new Date().getFullYear();
+
+    daySel.innerHTML = '<option value="">יום</option>' +
+      Array.from({length:31}, (_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('');
+    monthSel.innerHTML = '<option value="">חודש</option>' +
+      HEBREW_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+    yearSel.innerHTML = '<option value="">שנה</option>' +
+      Array.from({length:85}, (_,i)=>thisYear-14-i).map(y=>`<option value="${y}">${y}</option>`).join('');
+
+    if (d.birth_date){
+      const [by, bm, bd] = String(d.birth_date).split('-');
+      if (by) yearSel.value = String(parseInt(by,10));
+      if (bm) monthSel.value = String(parseInt(bm,10));
+      if (bd) daySel.value = String(parseInt(bd,10));
+    }
+
     document.getElementById('sitter-form').onsubmit = async (e) => {
       e.preventDefault();
       const errEl = document.getElementById('sitter-error');
       const btn = document.getElementById('sitter-submit');
       errEl.classList.remove('show');
+
+      const dayV = daySel.value, monthV = monthSel.value, yearV = yearSel.value;
+      if (!dayV || !monthV || !yearV){
+        errEl.textContent = 'נא לבחור יום, חודש ושנת לידה מלאים.';
+        errEl.classList.add('show');
+        return;
+      }
+      const birthDateStr = `${yearV}-${String(monthV).padStart(2,'0')}-${String(dayV).padStart(2,'0')}`;
+      // sanity check the combination is a real calendar date (catches e.g. 31 בפברואר)
+      const check = new Date(birthDateStr + 'T00:00:00');
+      if (check.getFullYear() != yearV || (check.getMonth()+1) != monthV || check.getDate() != dayV){
+        errEl.textContent = 'התאריך שנבחר אינו קיים בלוח השנה — בדקו את היום שנבחר.';
+        errEl.classList.add('show');
+        return;
+      }
+
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
@@ -704,7 +745,7 @@ if (CONFIG_IS_PLACEHOLDER){
           name: document.getElementById('s-name').value.trim(),
           phone: document.getElementById('s-phone').value.trim(),
           id_number: document.getElementById('s-id-number').value.trim(),
-          birth_date: document.getElementById('s-birth-date').value,
+          birth_date: birthDateStr,
           address: document.getElementById('s-address').value.trim(),
           city: document.getElementById('s-city').value.trim(),
           bio: document.getElementById('s-bio').value.trim(),
@@ -717,7 +758,7 @@ if (CONFIG_IS_PLACEHOLDER){
         toast('הפרופיל נשמר בהצלחה!');
         route();
       } catch (err){
-        errEl.textContent = 'שמירת הפרופיל נכשלה. נסו שוב.';
+        errEl.textContent = 'שמירת הפרופיל נכשלה: ' + (err?.message || err?.error_description || 'שגיאה לא ידועה') + (err?.hint ? ' — ' + err.hint : '');
         errEl.classList.add('show');
         btn.disabled = false;
         btn.textContent = 'שמירת הפרופיל';
