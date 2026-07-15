@@ -1,6 +1,909 @@
-drop policy if exists "Users can upload their own avatar" on storage.objects;
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>בייבי-לינק · חיבור בין הורים לבייביסיטרים (Supabase)</title>
+<meta name="description" content="בייבי-לינק — הפלטפורמה המקומית שמחברת בין הורים לבייביסיטרים אמינים באזור באר שבע.">
 
-create policy "Authenticated users can upload avatars"
-on storage.objects for insert
-to authenticated
-with check ( bucket_id = 'avatars' );
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Assistant:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS — BabyLink
+   Palette: near-black + violet, warm off-white text
+   Display: Space Grotesk (latin headings/logo) · Body: Assistant (Hebrew-first)
+   Utility/data: IBM Plex Mono (phone numbers, tags, meta)
+   Signature: interlocking twin-ring "link" mark — echoes parent↔sitter connection
+   ============================================================ */
+:root{
+  --bg:            #FFFFFF;
+  --bg-soft:       #F7F5FC;
+  --surface:       #FFFFFF;
+  --surface-2:     #F3EFFC;
+  --border:        #E4DFF0;
+  --border-soft:   #ECE8F5;
+  --violet:        #7C3AED;
+  --violet-deep:   #6425C4;
+  --violet-bright: #8B5CF6;
+  --lavender:      #6D28D9;
+  --text:          #1E1A29;
+  --text-muted:    #6B647F;
+  --text-faint:    #A79FBA;
+  --success:       #16A34A;
+  --danger:        #DC2626;
+  --shadow:        0 20px 45px -22px rgba(76,29,149,.18);
+  --radius-lg:     22px;
+  --radius-md:     14px;
+  --radius-sm:     9px;
+  --font-display:  'Space Grotesk', 'Assistant', sans-serif;
+  --font-body:     'Assistant', sans-serif;
+  --font-mono:     'IBM Plex Mono', monospace;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html{ scroll-behavior:smooth; }
+body{
+  background:
+    radial-gradient(1100px 600px at 85% -10%, rgba(139,92,246,.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(109,40,217,.05), transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  line-height:1.5;
+}
+img{ max-width:100%; display:block; }
+button{ font-family:inherit; cursor:pointer; }
+input, textarea, select{ font-family:inherit; }
+a{ color:inherit; }
+::selection{ background:var(--violet); color:#fff; }
+:focus-visible{ outline:2px solid var(--violet-bright); outline-offset:3px; border-radius:6px; }
+
+.hidden{ display:none !important; }
+.container{ width:100%; max-width:1120px; margin:0 auto; padding:0 24px; }
+
+/* ---------- Logo mark: interlocking rings ---------- */
+.brand{ display:flex; align-items:center; gap:10px; }
+.brand-mark{ width:34px; height:26px; position:relative; flex-shrink:0; }
+.brand-mark span{
+  position:absolute; top:0; width:22px; height:22px; border-radius:50%;
+  border:3px solid var(--violet-bright); background:transparent;
+}
+.brand-mark span:first-child{ right:0; }
+.brand-mark span:last-child{ left:0; border-color:var(--violet-deep); background:var(--bg); }
+.brand-name{ font-family:var(--font-display); font-weight:700; font-size:19px; letter-spacing:.2px; }
+.brand-name em{ font-style:normal; color:var(--violet-bright); }
+
+/* ---------- Top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:40;
+  background:rgba(255,255,255,.82); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border-soft);
+}
+.topbar-inner{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 0;
+}
+.topbar-actions{ display:flex; align-items:center; gap:12px; }
+.pill-role{
+  font-family:var(--font-mono); font-size:12px; color:var(--lavender);
+  background:rgba(139,92,246,.12); border:1px solid rgba(139,92,246,.35);
+  padding:5px 12px; border-radius:100px;
+}
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border:1px solid transparent; border-radius:12px;
+  padding:12px 22px; font-size:15px; font-weight:600;
+  transition:transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+  white-space:nowrap;
+}
+.btn:active{ transform:translateY(1px) scale(.99); }
+.btn-primary{
+  background:linear-gradient(135deg, var(--violet) 0%, var(--violet-deep) 100%);
+  color:#fff; box-shadow:0 10px 24px -10px rgba(139,92,246,.55);
+}
+.btn-primary:hover{ box-shadow:0 14px 30px -10px rgba(139,92,246,.75); }
+.btn-ghost{
+  background:transparent; color:var(--text); border-color:var(--border);
+}
+.btn-ghost:hover{ border-color:var(--violet-bright); color:var(--violet-bright); }
+.btn-text{ background:transparent; color:var(--text-muted); padding:12px 8px; }
+.btn-text:hover{ color:var(--violet-bright); }
+.btn-block{ width:100%; }
+.btn[disabled]{ opacity:.55; pointer-events:none; }
+
+/* ---------- Views / layout shell ---------- */
+.view{ padding:56px 0 96px; }
+.view-narrow{ max-width:460px; margin:0 auto; padding-inline:24px; }
+
+.eyebrow{
+  font-family:var(--font-mono); font-size:12px; letter-spacing:.08em;
+  color:var(--violet-bright); text-transform:uppercase;
+  display:flex; align-items:center; gap:8px; margin-bottom:14px;
+}
+.eyebrow::before{ content:''; width:16px; height:1px; background:var(--violet-bright); }
+
+h1.page-title{
+  font-family:var(--font-display); font-weight:700;
+  font-size:clamp(28px,4vw,40px); line-height:1.15; margin-bottom:10px;
+}
+.page-sub{ color:var(--text-muted); font-size:16px; max-width:52ch; margin-bottom:28px; }
+
+/* ---------- Auth card ---------- */
+.auth-shell{
+  min-height:calc(100vh - 73px);
+  display:flex; align-items:center; justify-content:center;
+  padding:40px 20px;
+  position:relative; overflow:hidden;
+}
+.auth-shell::before{
+  content:''; position:absolute; inset:-20%;
+  background:
+    radial-gradient(420px 320px at 20% 20%, rgba(139,92,246,.10), transparent 60%),
+    radial-gradient(380px 300px at 85% 80%, rgba(167,139,250,.08), transparent 60%);
+  filter:blur(10px); pointer-events:none;
+}
+.auth-card{
+  position:relative; width:100%; max-width:420px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:36px 32px;
+  box-shadow:var(--shadow);
+}
+.auth-head{ text-align:center; margin-bottom:26px; }
+.auth-head .brand{ justify-content:center; margin-bottom:18px; }
+.auth-head h1{ font-family:var(--font-display); font-size:23px; font-weight:700; margin-bottom:6px; }
+.auth-head p{ color:var(--text-muted); font-size:14px; }
+
+.field{ margin-bottom:16px; text-align:right; }
+.field label{ display:block; font-size:13px; color:var(--text-muted); margin-bottom:7px; font-weight:600; }
+.field input, .field textarea{
+  width:100%; background:var(--bg-soft); border:1px solid var(--border);
+  color:var(--text); border-radius:11px; padding:12px 14px; font-size:15px;
+  transition:border-color .15s ease, background .15s ease;
+}
+.field input::placeholder, .field textarea::placeholder{ color:var(--text-faint); }
+.field input:focus, .field textarea:focus{ border-color:var(--violet); background:#FDFCFF; outline:none; }
+.field textarea{ resize:vertical; min-height:96px; }
+.field-hint{ font-size:12.5px; color:var(--text-muted); font-weight:600; margin-top:6px; }
+
+.tab-switch{
+  display:flex; background:var(--bg-soft); border:1px solid var(--border);
+  border-radius:12px; padding:4px; margin-bottom:24px;
+}
+.tab-switch button{
+  flex:1; background:transparent; border:none; color:var(--text-muted);
+  padding:9px; border-radius:9px; font-size:14px; font-weight:600;
+  transition:background .15s ease, color .15s ease;
+}
+.tab-switch button.active{ background:var(--violet); color:#fff; }
+
+.form-error{
+  background:rgba(249,112,102,.1); border:1px solid rgba(249,112,102,.35);
+  color:#FCA79E; font-size:13px; padding:10px 14px; border-radius:10px; margin-bottom:16px;
+  display:none;
+}
+.form-error.show{ display:block; }
+
+/* ---------- Role selection ---------- */
+.role-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:560px){ .role-grid{ grid-template-columns:1fr; } }
+.role-card{
+  background:var(--surface); border:1.5px solid var(--border);
+  border-radius:var(--radius-md); padding:26px 22px; text-align:right;
+  transition:border-color .15s ease, transform .15s ease, background .15s ease;
+}
+.role-card:hover{ border-color:var(--violet); transform:translateY(-3px); background:var(--surface-2); }
+.role-card .icon{
+  width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  background:rgba(139,92,246,.14); border:1px solid rgba(139,92,246,.3); margin-bottom:16px; font-size:22px;
+}
+.role-card h3{ font-family:var(--font-display); font-size:18px; margin-bottom:8px; }
+.role-card p{ color:var(--text-muted); font-size:13.5px; margin-bottom:18px; line-height:1.6; }
+
+/* ---------- Photo upload ---------- */
+.photo-upload{ display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+.photo-preview{
+  width:78px; height:78px; border-radius:50%; overflow:hidden; flex-shrink:0;
+  background:var(--bg-soft); border:2px dashed var(--border);
+  display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:24px;
+}
+.photo-preview img{ width:100%; height:100%; object-fit:cover; }
+.photo-upload-actions{ display:flex; flex-direction:column; gap:6px; }
+.file-btn{
+  position:relative; overflow:hidden; display:inline-flex; width:fit-content;
+}
+.file-btn input[type=file]{
+  position:absolute; inset:0; opacity:0; cursor:pointer;
+}
+
+/* ---------- Feed ---------- */
+.feed-head{
+  display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  margin-bottom:28px;
+}
+.search-box{ position:relative; width:100%; max-width:320px; }
+.search-box input{
+  width:100%; background:var(--surface); border:1px solid var(--border);
+  color:var(--text); border-radius:12px; padding:12px 42px 12px 14px; font-size:14px;
+}
+.search-box input:focus{ border-color:var(--violet); outline:none; }
+.search-box .ic{ position:absolute; top:50%; right:14px; transform:translateY(-50%); color:var(--text-faint); }
+
+.sitter-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(252px,1fr)); gap:20px;
+}
+.sitter-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);
+  overflow:hidden; text-align:right; transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  cursor:pointer; position:relative;
+}
+.sitter-card:hover{ transform:translateY(-4px); border-color:var(--violet); box-shadow:var(--shadow); }
+.sitter-card .photo{
+  width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#F3EEFF,#EAE1FB);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
+  font-size:34px; color:var(--violet-bright); overflow:hidden;
+}
+.sitter-card .photo img{ width:100%; height:100%; object-fit:cover; }
+.sitter-card .body{ padding:16px 16px 18px; }
+.sitter-card h3{ font-family:var(--font-display); font-size:16.5px; margin-bottom:4px; }
+.sitter-card .loc{
+  font-family:var(--font-mono); font-size:11.5px; color:var(--violet-bright);
+  display:flex; align-items:center; gap:5px; margin-bottom:10px;
+}
+.sitter-card .bio-preview{
+  font-size:13px; color:var(--text-muted); line-height:1.55;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.badge-link{
+  position:absolute; top:12px; left:12px; background:rgba(255,255,255,.85); backdrop-filter:blur(6px);
+  border:1px solid rgba(124,58,237,.3); color:var(--lavender); font-family:var(--font-mono);
+  font-size:10.5px; padding:4px 9px; border-radius:100px; display:flex; align-items:center; gap:5px;
+}
+.badge-link .dot{ width:6px; height:6px; border-radius:50%; background:var(--success); }
+
+.empty-state{
+  text-align:center; padding:80px 20px; color:var(--text-muted); border:1px dashed var(--border);
+  border-radius:var(--radius-md); background:var(--surface);
+}
+.empty-state .icon{ font-size:40px; margin-bottom:14px; }
+.empty-state h3{ font-family:var(--font-display); color:var(--text); font-size:19px; margin-bottom:8px; }
+
+/* ---------- Profile detail modal ---------- */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(6,5,10,.72); backdrop-filter:blur(4px);
+  display:flex; align-items:center; justify-content:center; padding:24px; z-index:100;
+}
+.modal{
+  width:100%; max-width:480px; max-height:88vh; overflow-y:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow);
+}
+.modal-photo{
+  width:100%; aspect-ratio:16/10; background:linear-gradient(135deg,#F3EEFF,#EAE1FB);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
+  font-size:52px; color:var(--violet-bright); position:relative; overflow:hidden;
+}
+.modal-photo img{ width:100%; height:100%; object-fit:cover; }
+.modal-close{
+  position:absolute; top:14px; left:14px; width:34px; height:34px; border-radius:50%;
+  background:rgba(11,9,16,.65); border:1px solid rgba(255,255,255,.15); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:18px;
+}
+.modal-body{ padding:26px 26px 30px; text-align:right; }
+.modal-body h2{ font-family:var(--font-display); font-size:23px; margin-bottom:6px; }
+.modal-loc{
+  font-family:var(--font-mono); font-size:12.5px; color:var(--violet-bright); margin-bottom:18px;
+}
+.modal-bio{ color:var(--text-muted); font-size:14.5px; line-height:1.7; margin-bottom:24px; white-space:pre-wrap; }
+.modal-actions{ display:flex; gap:10px; }
+
+/* ---------- Setup notice (Firebase config missing) ---------- */
+.setup-notice{
+  max-width:640px; margin:80px auto; padding:36px; background:var(--surface);
+  border:1px solid rgba(249,112,102,.35); border-radius:var(--radius-lg);
+}
+.setup-notice h1{ font-family:var(--font-display); font-size:22px; margin-bottom:12px; color:#FCA79E; }
+.setup-notice p{ color:var(--text-muted); font-size:14.5px; line-height:1.7; margin-bottom:10px; }
+.setup-notice code{
+  background:var(--bg-soft); border:1px solid var(--border); padding:2px 8px; border-radius:6px;
+  font-family:var(--font-mono); font-size:13px; color:var(--lavender);
+}
+.setup-notice pre{
+  background:var(--bg-soft); border:1px solid var(--border); border-radius:10px; padding:16px;
+  overflow-x:auto; font-family:var(--font-mono); font-size:12.5px; color:var(--text-muted); margin:14px 0;
+}
+
+/* ---------- Loading ---------- */
+.spinner{
+  width:20px; height:20px; border-radius:50%; border:2.5px solid rgba(255,255,255,.25);
+  border-top-color:#fff; animation:spin .7s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.page-loader{
+  min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  color:var(--text-muted); font-size:14px;
+}
+.page-loader .spinner{ border-color:rgba(139,92,246,.25); border-top-color:var(--violet); width:28px; height:28px; }
+
+/* ---------- Toast ---------- */
+#toast{
+  position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+  padding:13px 22px; border-radius:100px; font-size:13.5px; box-shadow:var(--shadow);
+  opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease; z-index:200;
+  display:flex; align-items:center; gap:9px;
+}
+#toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+#toast.error{ border-color:rgba(249,112,102,.4); }
+#toast .dot{ width:7px; height:7px; border-radius:50%; background:var(--success); flex-shrink:0; }
+#toast.error .dot{ background:var(--danger); }
+
+footer{
+  border-top:1px solid var(--border-soft); padding:26px 0; margin-top:40px;
+  color:var(--text-faint); font-size:12.5px; text-align:center;
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SUPABASE SDK
+     ============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<div id="app"></div>
+<div id="toast"><span class="dot"></span><span id="toast-msg"></span></div>
+
+<script>
+/* ============================================================
+   1) SUPABASE CONFIG — fill this in from your Supabase project
+   Project → Settings → API → "Project URL" and "anon public" key
+   ============================================================ */
+const SUPABASE_URL = "https://yxtdkqafemxssvhucbst.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_7dmWVbAkivCDBUtv1YvCcw_hP1G6x6-";
+
+const CONFIG_IS_PLACEHOLDER = SUPABASE_URL === "YOUR_SUPABASE_URL";
+
+const app = document.getElementById('app');
+
+/* ---------- tiny toast helper ---------- */
+let toastTimer;
+function toast(msg, isError=false){
+  const el = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  el.classList.toggle('error', isError);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 3200);
+}
+
+/* ---------- setup notice when Supabase isn't configured yet ---------- */
+function renderSetupNotice(){
+  app.innerHTML = `
+    <div class="container">
+      <div class="setup-notice">
+        <div class="brand" style="margin-bottom:22px;">
+          <div class="brand-mark"><span></span><span></span></div>
+          <div class="brand-name">בייבי<em>לינק</em></div>
+        </div>
+        <h1>⚠️ חסרה הגדרת Supabase</h1>
+        <p>כדי שהאתר יעבוד (הרשמה, התחברות, פרופילים, תמונות) צריך לחבר אותו לפרויקט Supabase משלך:</p>
+        <p>1. היכנס ל-<code>supabase.com</code>, צור חשבון וצור <code>New project</code>.</p>
+        <p>2. בתפריט הצד: <code>SQL Editor</code> → הדבק והרץ את הסקריפט הבא כדי ליצור את טבלת הפרופילים ואת חוקי ההרשאות:</p>
+        <pre>create table profiles (
+  id uuid references auth.users on delete cascade primary key,
+  role text,
+  name text default '',
+  phone text default '',
+  bio text default '',
+  photo_url text default '',
+  id_number text default '',
+  birth_date date,
+  address text default '',
+  city text default '',
+  created_at timestamptz default now()
+);
+
+alter table profiles enable row level security;
+
+create policy "Anyone signed in can view profiles"
+  on profiles for select
+  using ( auth.role() = 'authenticated' );
+
+create policy "Users can insert their own profile"
+  on profiles for insert
+  with check ( auth.uid() = id );
+
+create policy "Users can update their own profile"
+  on profiles for update
+  using ( auth.uid() = id );</pre>
+        <p>3. בתפריט הצד: <code>Storage</code> → <code>New bucket</code> → שם הדלי: <code>avatars</code> → סמנו <b>Public bucket</b> → Create.</p>
+        <p>4. בתפריט הצד: <code>Settings → API</code>, העתיקו את ה-<code>Project URL</code> ואת ה-<code>anon public</code> key.</p>
+        <p>5. הדביקו אותם כאן בקובץ <code>index.html</code> בראש קטע ה-JS:</p>
+        <pre>const SUPABASE_URL = "https://xxxx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOि...";</pre>
+        <p>לאחר השמירה רענן את הדף — האפליקציה תעלה אוטומטית.</p>
+      </div>
+    </div>`;
+}
+
+if (CONFIG_IS_PLACEHOLDER){
+  renderSetupNotice();
+} else {
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ============================================================
+     2) STATE
+     ============================================================ */
+  let currentUser = null;   // Supabase auth user
+  let currentDoc  = null;   // profiles row for the current user
+  let allSitters  = [];     // cached babysitter list for the parent feed
+  let pendingPhotoFile = null;
+
+  /* ============================================================
+     3) SHELL / NAV
+     ============================================================ */
+  function renderShell(innerHtml, opts={}){
+    const showNav = !!currentUser && !opts.hideNav;
+    app.innerHTML = `
+      ${showNav ? `
+      <div class="topbar">
+        <div class="container topbar-inner">
+          <div class="brand">
+            <div class="brand-mark"><span></span><span></span></div>
+            <div class="brand-name">בייבי<em>לינק</em></div>
+          </div>
+          <div class="topbar-actions">
+            ${currentDoc?.role ? `<span class="pill-role">${currentDoc.role === 'parent' ? 'הורה' : 'בייביסיטר'}</span>` : ''}
+            <button class="btn btn-text" id="btn-signout">התנתקות</button>
+          </div>
+        </div>
+      </div>` : ''}
+      <div class="container view">${innerHtml}</div>
+      <footer>בייבי-לינק · המקום שלך למצוא בייביסיטר באר שבע והסביבה</footer>
+    `;
+    if (showNav){
+      document.getElementById('btn-signout').onclick = () => sb.auth.signOut();
+    }
+  }
+
+  function renderLoader(msg='טוען...'){
+    app.innerHTML = `<div class="page-loader"><div class="spinner"></div><span>${msg}</span></div>`;
+  }
+
+  /* ============================================================
+     4) AUTH VIEW (login / signup)
+     ============================================================ */
+  function renderAuth(){
+    let mode = 'login'; // or 'signup'
+
+    function paint(){
+      app.innerHTML = `
+        <div class="auth-shell">
+          <div class="auth-card">
+            <div class="auth-head">
+              <div class="brand"><div class="brand-mark"><span></span><span></span></div><div class="brand-name">בייבי<em>לינק</em></div></div>
+              <h1>${mode === 'login' ? 'ברוכים השבים' : 'יצירת חשבון חדש'}</h1>
+              <p>${mode === 'login' ? 'התחברו כדי להמשיך' : 'הצטרפו לקהילת ההורים והבייביסיטרים באזורכם'}</p>
+            </div>
+            <div class="tab-switch">
+              <button id="tab-login" class="${mode==='login'?'active':''}">התחברות</button>
+              <button id="tab-signup" class="${mode==='signup'?'active':''}">הרשמה</button>
+            </div>
+            <div class="form-error" id="auth-error"></div>
+            <form id="auth-form">
+              <div class="field">
+                <label for="email">אימייל</label>
+                <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+              </div>
+              <div class="field">
+                <label for="password">סיסמה</label>
+                <input type="password" id="password" placeholder="לפחות 6 תווים" required minlength="6" autocomplete="${mode==='login'?'current-password':'new-password'}">
+              </div>
+              <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
+                ${mode === 'login' ? 'התחברות' : 'הרשמה'}
+              </button>
+              ${mode === 'signup' ? '<p class="field-hint" style="text-align:center;margin-top:14px;">בהתאם להגדרות ברירת המחדל של Supabase, ייתכן שתקבלו מייל אימות לפני שתוכלו להתחבר.</p>' : ''}
+            </form>
+          </div>
+        </div>`;
+
+      document.getElementById('tab-login').onclick = () => { mode='login'; paint(); };
+      document.getElementById('tab-signup').onclick = () => { mode='signup'; paint(); };
+
+      document.getElementById('auth-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const errEl = document.getElementById('auth-error');
+        const btn = document.getElementById('auth-submit');
+        errEl.classList.remove('show');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>';
+        try {
+          if (mode === 'login'){
+            const { error } = await sb.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+          } else {
+            const { data, error } = await sb.auth.signUp({ email, password });
+            if (error) throw error;
+            if (data.user){
+              const { error: insErr } = await sb.from('profiles').insert({
+                id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'',
+                id_number:'', birth_date:null, address:'', city:''
+              });
+              // ignore duplicate-row errors (e.g. row already created by a trigger)
+              if (insErr && insErr.code !== '23505') throw insErr;
+            }
+            if (!data.session){
+              toast('נשלח אימייל אימות — בדקו את תיבת הדואר ואז התחברו.');
+              mode = 'login'; paint();
+              btn.disabled = false;
+              return;
+            }
+          }
+        } catch (err){
+          errEl.textContent = friendlyAuthError(err);
+          errEl.classList.add('show');
+          btn.disabled = false;
+          btn.textContent = mode === 'login' ? 'התחברות' : 'הרשמה';
+        }
+      };
+    }
+    paint();
+  }
+
+  function friendlyAuthError(err){
+    const msg = (err && err.message) || '';
+    const map = {
+      'User already registered': 'כתובת האימייל הזו כבר רשומה במערכת. נסו להתחבר במקום.',
+      'Invalid login credentials': 'אימייל או סיסמה שגויים.',
+      'Password should be at least 6 characters': 'הסיסמה חלשה מדי — נדרשים לפחות 6 תווים.',
+      'Email not confirmed': 'יש לאמת את כתובת האימייל לפני ההתחברות — בדקו את תיבת הדואר.'
+    };
+    return map[msg] || msg || 'משהו השתבש. נסו שוב.';
+  }
+
+  /* ============================================================
+     5) ROLE SELECTION VIEW
+     ============================================================ */
+  function renderRoleSelect(){
+    renderShell(`
+      <div class="view-narrow" style="max-width:640px;">
+        <div class="eyebrow">שלב 1 מתוך 2</div>
+        <h1 class="page-title">איך תרצו להשתמש בבייבי-לינק?</h1>
+        <p class="page-sub">תוכלו לבחור סוג חשבון אחד — הבחירה קובעת איזה מסכים תראו מעכשיו.</p>
+        <div class="role-grid">
+          <div class="role-card" id="pick-parent">
+            <div class="icon">🔍</div>
+            <h3>אני הורה</h3>
+            <p>מחפש/ת בייביסיטר אמין/ה באזור מגוריי. אעבור לרשימת הבייביסיטרים הזמינים.</p>
+            <button class="btn btn-ghost btn-block">בחירה כהורה</button>
+          </div>
+          <div class="role-card" id="pick-sitter">
+            <div class="icon">🧸</div>
+            <h3>אני בייביסיטר</h3>
+            <p>מחפש/ת עבודה בשמירה על ילדים. אמלא פרופיל שהורים באזור יוכלו לראות.</p>
+            <button class="btn btn-ghost btn-block">בחירה כבייביסיטר</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById('pick-parent').onclick = () => setRole('parent');
+    document.getElementById('pick-sitter').onclick = () => setRole('babysitter');
+  }
+
+  async function setRole(role){
+    renderLoader('שומר בחירה...');
+    try {
+      const { error } = await sb.from('profiles').update({ role }).eq('id', currentUser.id);
+      if (error) throw error;
+      currentDoc = { ...(currentDoc||{}), role };
+      route();
+    } catch(err){
+      toast('שמירת התפקיד נכשלה, נסו שוב', true);
+      renderRoleSelect();
+    }
+  }
+
+  /* ============================================================
+     6) BABYSITTER PROFILE FORM
+     ============================================================ */
+  function renderSitterForm(){
+    const d = currentDoc || {};
+    pendingPhotoFile = null;
+    renderShell(`
+      <div class="view-narrow">
+        <div class="eyebrow">שלב 2 מתוך 2</div>
+        <h1 class="page-title">בניית הפרופיל שלך</h1>
+        <p class="page-sub">הפרטים האלה יוצגו להורים באזור שלך. ככל שהפרופיל מלא יותר — כך קל יותר להורים לבחור בכם.</p>
+
+        <div class="photo-upload">
+          <div class="photo-preview" id="photo-preview">${d.photo_url ? `<img src="${d.photo_url}" alt="">` : '📷'}</div>
+          <div class="photo-upload-actions">
+            <div class="btn btn-ghost file-btn">
+              בחירת תמונת פרופיל
+              <input type="file" accept="image/*" id="photo-input">
+            </div>
+            <span class="field-hint">JPG או PNG, עד 5MB</span>
+          </div>
+        </div>
+
+        <div class="form-error" id="sitter-error"></div>
+        <form id="sitter-form">
+          <div class="field">
+            <label for="s-name">שם מלא</label>
+            <input type="text" id="s-name" placeholder="לדוגמה: נועה כהן" value="${escapeAttr(d.name)}" required>
+          </div>
+          <div class="field">
+            <label for="s-phone">טלפון</label>
+            <input type="tel" id="s-phone" placeholder="050-1234567" value="${escapeAttr(d.phone)}" required>
+          </div>
+          <div class="field">
+            <label for="s-id-number">תעודת זהות</label>
+            <input type="text" id="s-id-number" inputmode="numeric" placeholder="000000000" value="${escapeAttr(d.id_number)}" required>
+            <div class="field-hint">🔒 לשימוש פנימי לאימות זהות בלבד — לא יוצג להורים.</div>
+          </div>
+          <div class="field">
+            <label for="s-birth-day">תאריך לידה</label>
+            <div style="display:flex; gap:8px;">
+              <select id="s-birth-day" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+              <select id="s-birth-month" required style="flex:1.4; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+              <select id="s-birth-year" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="s-address">כתובת מגורים</label>
+            <input type="text" id="s-address" placeholder="לדוגמה: הרצל 12" value="${escapeAttr(d.address)}" required>
+            <div class="field-hint">🔒 הכתובת המדויקת נשמרת פרטית ולא מוצגת להורים — רק העיר תוצג בפרופיל הציבורי.</div>
+          </div>
+          <div class="field">
+            <label for="s-city">עיר</label>
+            <input type="text" id="s-city" placeholder="לדוגמה: באר שבע" value="${escapeAttr(d.city)}" required>
+          </div>
+          <div class="field">
+            <label for="s-bio">קצת עליי (Bio)</label>
+            <textarea id="s-bio" placeholder="ניסיון, גילאים שאיתם עבדתם, זמינות, המלצות..." required>${escapeHtml(d.bio)}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="sitter-submit">שמירת הפרופיל</button>
+        </form>
+      </div>
+    `);
+
+    document.getElementById('photo-input').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 5*1024*1024){ toast('הקובץ גדול מדי (מקסימום 5MB)', true); return; }
+      pendingPhotoFile = file;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        document.getElementById('photo-preview').innerHTML = `<img src="${ev.target.result}" alt="">`;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    /* ---- populate day / month / year selects ---- */
+    const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+    const daySel = document.getElementById('s-birth-day');
+    const monthSel = document.getElementById('s-birth-month');
+    const yearSel = document.getElementById('s-birth-year');
+    const thisYear = new Date().getFullYear();
+
+    daySel.innerHTML = '<option value="">יום</option>' +
+      Array.from({length:31}, (_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('');
+    monthSel.innerHTML = '<option value="">חודש</option>' +
+      HEBREW_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+    yearSel.innerHTML = '<option value="">שנה</option>' +
+      Array.from({length:100}, (_,i)=>thisYear-14-i).map(y=>`<option value="${y}">${y}</option>`).join('');
+
+    if (d.birth_date){
+      const [by, bm, bd] = String(d.birth_date).split('-');
+      if (by) yearSel.value = String(parseInt(by,10));
+      if (bm) monthSel.value = String(parseInt(bm,10));
+      if (bd) daySel.value = String(parseInt(bd,10));
+    }
+
+    document.getElementById('sitter-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('sitter-error');
+      const btn = document.getElementById('sitter-submit');
+      errEl.classList.remove('show');
+
+      const dayV = daySel.value, monthV = monthSel.value, yearV = yearSel.value;
+      if (!dayV || !monthV || !yearV){
+        errEl.textContent = 'נא לבחור יום, חודש ושנת לידה מלאים.';
+        errEl.classList.add('show');
+        return;
+      }
+      const birthDateStr = `${yearV}-${String(monthV).padStart(2,'0')}-${String(dayV).padStart(2,'0')}`;
+      // sanity check the combination is a real calendar date (catches e.g. 31 בפברואר)
+      const check = new Date(birthDateStr + 'T00:00:00');
+      if (check.getFullYear() != yearV || (check.getMonth()+1) != monthV || check.getDate() != dayV){
+        errEl.textContent = 'התאריך שנבחר אינו קיים בלוח השנה — בדקו את היום שנבחר.';
+        errEl.classList.add('show');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        let photo_url = d.photo_url || '';
+        if (pendingPhotoFile){
+          const path = `${currentUser.id}.jpg`;
+          const { error: upErr } = await sb.storage.from('avatars').upload(path, pendingPhotoFile, { upsert:true });
+          if (upErr) throw upErr;
+          const { data: pub } = sb.storage.from('avatars').getPublicUrl(path);
+          photo_url = pub.publicUrl + '?t=' + Date.now(); // cache-bust so updated photos show immediately
+        }
+        const payload = {
+          name: document.getElementById('s-name').value.trim(),
+          phone: document.getElementById('s-phone').value.trim(),
+          id_number: document.getElementById('s-id-number').value.trim(),
+          birth_date: birthDateStr,
+          address: document.getElementById('s-address').value.trim(),
+          city: document.getElementById('s-city').value.trim(),
+          bio: document.getElementById('s-bio').value.trim(),
+          photo_url,
+          role: 'babysitter'
+        };
+        const { error } = await sb.from('profiles').update(payload).eq('id', currentUser.id);
+        if (error) throw error;
+        currentDoc = { ...currentDoc, ...payload };
+        toast('הפרופיל נשמר בהצלחה!');
+        route();
+      } catch (err){
+        errEl.textContent = 'שמירת הפרופיל נכשלה: ' + (err?.message || err?.error_description || 'שגיאה לא ידועה') + (err?.hint ? ' — ' + err.hint : '');
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'שמירת הפרופיל';
+      }
+    };
+  }
+
+  /* ============================================================
+     7) PARENT FEED
+     ============================================================ */
+  async function renderParentFeed(){
+    renderShell(`
+      <div class="feed-head">
+        <div>
+          <div class="eyebrow">${allSitters.length} בייביסיטרים רשומים</div>
+          <h1 class="page-title" style="margin-bottom:0;">בייביסיטרים באזור שלך</h1>
+        </div>
+        <div class="search-box">
+          <input type="text" id="sitter-search" placeholder="חיפוש לפי שם או אזור...">
+          <span class="ic">⌕</span>
+        </div>
+      </div>
+      <div id="sitter-grid-wrap"><div class="page-loader"><div class="spinner"></div><span>טוען בייביסיטרים...</span></div></div>
+    `);
+
+    try {
+      const { data, error } = await sb.from('profiles').select('*').eq('role','babysitter');
+      if (error) throw error;
+      allSitters = (data || []).filter(s => s.name);
+    } catch(err){
+      document.getElementById('sitter-grid-wrap').innerHTML = `
+        <div class="empty-state"><div class="icon">⚠️</div><h3>לא הצלחנו לטעון את הרשימה</h3><p>נסו לרענן את הדף.</p></div>`;
+      return;
+    }
+
+    paintSitterGrid(allSitters);
+    document.getElementById('sitter-search').oninput = (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      const filtered = allSitters.filter(s =>
+        s.name.toLowerCase().includes(q) || (s.city||'').toLowerCase().includes(q)
+      );
+      paintSitterGrid(filtered);
+    };
+  }
+
+  function paintSitterGrid(list){
+    const wrap = document.getElementById('sitter-grid-wrap');
+    if (!list.length){
+      wrap.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🧸</div>
+          <h3>עדיין אין בייביסיטרים תואמים</h3>
+          <p>נסו חיפוש אחר, או חזרו לבדוק שוב בקרוב.</p>
+        </div>`;
+      return;
+    }
+    wrap.innerHTML = `<div class="sitter-grid">
+      ${list.map((s,i) => `
+        <div class="sitter-card" data-idx="${i}">
+          <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
+          <div class="photo">${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}</div>
+          <div class="body">
+            <h3>${escapeHtml(s.name)}</h3>
+            <div class="loc">📍 ${escapeHtml(s.city||'')}</div>
+            <p class="bio-preview">${escapeHtml(s.bio||'')}</p>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+    wrap.querySelectorAll('.sitter-card').forEach(card => {
+      card.onclick = () => openSitterModal(list[+card.dataset.idx]);
+    });
+  }
+
+  function openSitterModal(s){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal">
+        <div class="modal-photo">
+          <button class="modal-close" id="modal-close">✕</button>
+          ${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}
+        </div>
+        <div class="modal-body">
+          <h2>${escapeHtml(s.name)}</h2>
+          <div class="modal-loc">📍 ${escapeHtml(s.city||'')}</div>
+          <p class="modal-bio">${escapeHtml(s.bio||'')}</p>
+          <div class="modal-actions">
+            <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
+            <a class="btn btn-ghost" style="flex:1;" href="https://wa.me/${normalizePhone(s.phone)}" target="_blank" rel="noopener">💬 וואטסאפ</a>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
+    backdrop.querySelector('#modal-close').onclick = () => backdrop.remove();
+  }
+
+  /* ============================================================
+     8) HELPERS
+     ============================================================ */
+  function initials(name){
+    return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
+  function normalizePhone(phone){
+    return '972' + (phone||'').replace(/\D/g,'').replace(/^0/,'');
+  }
+  function escapeHtml(str){
+    return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(str){ return escapeHtml(str); }
+
+  /* ============================================================
+     9) ROUTER — decides which view to show based on auth + profile state
+     ============================================================ */
+  function route(){
+    if (!currentUser){ renderAuth(); return; }
+    if (!currentDoc || currentDoc.role == null){ renderRoleSelect(); return; }
+    if (currentDoc.role === 'babysitter'){ renderSitterForm(); return; } // sitters can keep editing their own profile
+    if (currentDoc.role === 'parent'){ renderParentFeed(); return; }
+    renderRoleSelect();
+  }
+
+  /* ============================================================
+     10) AUTH STATE LISTENER — entry point
+     ============================================================ */
+  renderLoader('טוען את בייבי-לינק...');
+
+  async function loadUserAndRoute(session){
+    currentUser = session ? session.user : null;
+    if (!currentUser){ currentDoc = null; route(); return; }
+    renderLoader('טוען פרופיל...');
+    try {
+      const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      currentDoc = data || { role:null };
+    } catch(err){
+      currentDoc = { role:null };
+    }
+    route();
+  }
+
+  sb.auth.getSession().then(({ data }) => loadUserAndRoute(data.session));
+  sb.auth.onAuthStateChange((_event, session) => loadUserAndRoute(session));
+}
+</script>
+</body>
+</html>
