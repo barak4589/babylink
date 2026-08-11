@@ -403,8 +403,8 @@ function renderSetupNotice(){
   phone text default '',
   bio text default '',
   photo_url text default '',
-  id_number text default '',
   birth_date date,
+  parental_consent boolean default false,
   address text default '',
   city text default '',
   created_at timestamptz default now()
@@ -474,7 +474,17 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIs...";</pre>
 if (CONFIG_IS_PLACEHOLDER){
   renderSetupNotice();
 } else {
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // "Remember me" toggles whether the session survives closing the browser:
+  // checked -> localStorage (persists), unchecked -> sessionStorage (cleared on tab close).
+  let rememberMe = localStorage.getItem('babylink-remember') !== '0';
+  const rememberAwareStorage = {
+    getItem: (key) => (rememberMe ? localStorage : sessionStorage).getItem(key),
+    setItem: (key, value) => (rememberMe ? localStorage : sessionStorage).setItem(key, value),
+    removeItem: (key) => { localStorage.removeItem(key); sessionStorage.removeItem(key); }
+  };
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storage: rememberAwareStorage }
+  });
 
   /* ============================================================
      2) STATE
@@ -571,6 +581,14 @@ if (CONFIG_IS_PLACEHOLDER){
                 <label for="password">סיסמה</label>
                 <input type="password" id="password" placeholder="לפחות 6 תווים" required minlength="6" autocomplete="${mode==='login'?'current-password':'new-password'}">
               </div>
+              ${mode === 'login' ? `
+              <div style="display:flex; align-items:center; justify-content:space-between; margin:-4px 0 18px;">
+                <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; color:var(--text-muted); cursor:pointer;">
+                  <input type="checkbox" id="remember-me" ${rememberMe ? 'checked' : ''} style="width:16px; height:16px; accent-color:var(--violet);">
+                  זכור אותי
+                </label>
+                <button type="button" id="forgot-password" class="btn btn-text" style="padding:0; font-size:13.5px;">שכחתי סיסמה</button>
+              </div>` : ''}
               <button type="submit" class="btn btn-primary btn-block" id="auth-submit">
                 ${mode === 'login' ? 'התחברות' : 'הרשמה'}
               </button>
@@ -581,6 +599,27 @@ if (CONFIG_IS_PLACEHOLDER){
 
       document.getElementById('tab-login').onclick = () => { mode='login'; paint(); };
       document.getElementById('tab-signup').onclick = () => { mode='signup'; paint(); };
+
+      if (mode === 'login'){
+        document.getElementById('forgot-password').onclick = async () => {
+          const email = document.getElementById('email').value.trim();
+          const errEl = document.getElementById('auth-error');
+          errEl.classList.remove('show');
+          if (!email){
+            errEl.textContent = 'נא להזין כתובת אימייל כדי לאפס את הסיסמה.';
+            errEl.classList.add('show');
+            return;
+          }
+          try {
+            const { error } = await sb.auth.resetPasswordForEmail(email);
+            if (error) throw error;
+            toast('נשלח אימייל עם קישור לאיפוס הסיסמה.');
+          } catch (err){
+            errEl.textContent = friendlyAuthError(err);
+            errEl.classList.add('show');
+          }
+        };
+      }
 
       document.getElementById('auth-form').onsubmit = async (e) => {
         e.preventDefault();
@@ -593,6 +632,8 @@ if (CONFIG_IS_PLACEHOLDER){
         btn.innerHTML = '<span class="spinner"></span>';
         try {
           if (mode === 'login'){
+            rememberMe = document.getElementById('remember-me').checked;
+            localStorage.setItem('babylink-remember', rememberMe ? '1' : '0');
             const { error } = await sb.auth.signInWithPassword({ email, password });
             if (error) throw error;
           } else {
@@ -601,7 +642,7 @@ if (CONFIG_IS_PLACEHOLDER){
             if (data.user){
               const { error: insErr } = await sb.from('profiles').insert({
                 id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'',
-                id_number:'', birth_date:null, address:'', city:''
+                birth_date:null, address:'', city:'', parental_consent:false
               });
               // ignore duplicate-row errors (e.g. row already created by a trigger)
               if (insErr && insErr.code !== '23505') throw insErr;
@@ -712,17 +753,20 @@ if (CONFIG_IS_PLACEHOLDER){
             <input type="tel" id="s-phone" placeholder="050-1234567" value="${escapeAttr(d.phone)}" required>
           </div>
           <div class="field">
-            <label for="s-id-number">תעודת זהות</label>
-            <input type="text" id="s-id-number" inputmode="numeric" placeholder="000000000" value="${escapeAttr(d.id_number)}" required>
-            <div class="field-hint">🔒 לשימוש פנימי לאימות זהות בלבד — לא יוצג להורים.</div>
-          </div>
-          <div class="field">
             <label for="s-birth-day">תאריך לידה</label>
             <div style="display:flex; gap:8px;">
               <select id="s-birth-day" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
               <select id="s-birth-month" required style="flex:1.4; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
               <select id="s-birth-year" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
             </div>
+            <div class="form-error" id="age-gate-msg" style="margin-top:10px;"></div>
+          </div>
+          <div class="field" id="parental-consent-wrap" style="display:none;">
+            <label style="display:flex; align-items:flex-start; gap:9px; cursor:pointer; font-weight:normal;">
+              <input type="checkbox" id="parental-consent" style="width:18px; height:18px; margin-top:2px; accent-color:var(--violet); flex-shrink:0;">
+              <span>אני מאשר/ת שהורה או אפוטרופוס מודע/ת ומסכים/ה להרשמתי כבייביסיטר/ית (נדרש אישור הורה בגילאי 14–15).</span>
+            </label>
+            <div class="field-hint">טופס אישור ההורה המלא יתעדכן בהמשך.</div>
           </div>
           <div class="field">
             <label for="s-address">כתובת מגורים</label>
@@ -780,6 +824,41 @@ if (CONFIG_IS_PLACEHOLDER){
       if (bd) daySel.value = String(parseInt(bd,10));
     }
 
+    /* ---- age gate: <14 blocked, 14-15 needs parental consent, 16+ registers as usual ---- */
+    function calcAge(birthDateStr){
+      const [y, m, dd] = birthDateStr.split('-').map(Number);
+      const today = new Date();
+      let age = today.getFullYear() - y;
+      const hadBirthdayThisYear = (today.getMonth()+1 > m) || (today.getMonth()+1 === m && today.getDate() >= dd);
+      if (!hadBirthdayThisYear) age--;
+      return age;
+    }
+
+    const ageGateEl = document.getElementById('age-gate-msg');
+    const consentWrap = document.getElementById('parental-consent-wrap');
+    const consentInput = document.getElementById('parental-consent');
+    consentInput.checked = !!d.parental_consent;
+
+    function evaluateAgeGate(){
+      const dayV = daySel.value, monthV = monthSel.value, yearV = yearSel.value;
+      ageGateEl.classList.remove('show'); ageGateEl.textContent = '';
+      consentWrap.style.display = 'none';
+      consentInput.required = false;
+      if (!dayV || !monthV || !yearV) return null;
+      const age = calcAge(`${yearV}-${String(monthV).padStart(2,'0')}-${String(dayV).padStart(2,'0')}`);
+      if (age < 14){
+        ageGateEl.textContent = 'לא ניתן להירשם כבייביסיטר/ית בגיל זה — ההרשמה מתאפשרת רק מגיל 14 ומעלה.';
+        ageGateEl.classList.add('show');
+      } else if (age <= 15){
+        consentWrap.style.display = '';
+        consentInput.required = true;
+      }
+      return age;
+    }
+
+    [daySel, monthSel, yearSel].forEach(sel => sel.onchange = evaluateAgeGate);
+    evaluateAgeGate();
+
     document.getElementById('sitter-form').onsubmit = async (e) => {
       e.preventDefault();
       const errEl = document.getElementById('sitter-error');
@@ -801,19 +880,17 @@ if (CONFIG_IS_PLACEHOLDER){
         return;
       }
 
-      /* ---- age gate: under 14 blocked · 14-15 needs parental consent (coming soon) · 16+ proceeds normally ---- */
-      const age = calculateAge(birthDateStr);
+      const age = evaluateAgeGate();
       if (age < 14){
-        errEl.textContent = '🚫 לא ניתן להירשם לבייבי-לינק מתחת לגיל 14.';
+        errEl.textContent = 'לא ניתן להירשם כבייביסיטר/ית בגיל זה — ההרשמה מתאפשרת רק מגיל 14 ומעלה.';
         errEl.classList.add('show');
         return;
       }
-      if (age >= 14 && age <= 15){
-        errEl.textContent = '👨‍👩‍👧 בגילאי 14–15 נדרש אישור הורים כדי להירשם. תהליך אישור ההורים עדיין בבנייה ויתווסף בקרוב — לא ניתן להשלים את ההרשמה כרגע. נא לנסות שוב מאוחר יותר.';
+      if (age <= 15 && !consentInput.checked){
+        errEl.textContent = 'בגילאי 14–15 נדרש אישור הורה כדי להמשיך בהרשמה.';
         errEl.classList.add('show');
         return;
       }
-      // age >= 16 → proceed exactly as usual, no extra step
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
@@ -829,12 +906,12 @@ if (CONFIG_IS_PLACEHOLDER){
         const payload = {
           name: document.getElementById('s-name').value.trim(),
           phone: document.getElementById('s-phone').value.trim(),
-          id_number: document.getElementById('s-id-number').value.trim(),
           birth_date: birthDateStr,
           address: document.getElementById('s-address').value.trim(),
           city: document.getElementById('s-city').value.trim(),
           bio: document.getElementById('s-bio').value.trim(),
           photo_url,
+          parental_consent: age <= 15 ? consentInput.checked : d.parental_consent || false,
           role: 'babysitter'
         };
         const { error } = await sb.from('profiles').update(payload).eq('id', currentUser.id);
@@ -1182,14 +1259,6 @@ if (CONFIG_IS_PLACEHOLDER){
      ============================================================ */
   function initials(name){
     return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  }
-  function calculateAge(birthDateStr){
-    const [y, m, d] = birthDateStr.split('-').map(Number);
-    const today = new Date();
-    let age = today.getFullYear() - y;
-    const hadBirthdayThisYear = (today.getMonth()+1 > m) || (today.getMonth()+1 === m && today.getDate() >= d);
-    if (!hadBirthdayThisYear) age--;
-    return age;
   }
   function normalizePhone(phone){
     return '972' + (phone||'').replace(/\D/g,'').replace(/^0/,'');
