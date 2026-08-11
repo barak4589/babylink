@@ -801,6 +801,20 @@ if (CONFIG_IS_PLACEHOLDER){
         return;
       }
 
+      /* ---- age gate: under 14 blocked · 14-15 needs parental consent (coming soon) · 16+ proceeds normally ---- */
+      const age = calculateAge(birthDateStr);
+      if (age < 14){
+        errEl.textContent = '🚫 לא ניתן להירשם לבייבי-לינק מתחת לגיל 14.';
+        errEl.classList.add('show');
+        return;
+      }
+      if (age >= 14 && age <= 15){
+        errEl.textContent = '👨‍👩‍👧 בגילאי 14–15 נדרש אישור הורים כדי להירשם. תהליך אישור ההורים עדיין בבנייה ויתווסף בקרוב — לא ניתן להשלים את ההרשמה כרגע. נא לנסות שוב מאוחר יותר.';
+        errEl.classList.add('show');
+        return;
+      }
+      // age >= 16 → proceed exactly as usual, no extra step
+
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
@@ -1168,6 +1182,14 @@ if (CONFIG_IS_PLACEHOLDER){
      ============================================================ */
   function initials(name){
     return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
+  function calculateAge(birthDateStr){
+    const [y, m, d] = birthDateStr.split('-').map(Number);
+    const today = new Date();
+    let age = today.getFullYear() - y;
+    const hadBirthdayThisYear = (today.getMonth()+1 > m) || (today.getMonth()+1 === m && today.getDate() >= d);
+    if (!hadBirthdayThisYear) age--;
+    return age;
   }
   function normalizePhone(phone){
     return '972' + (phone||'').replace(/\D/g,'').replace(/^0/,'');
