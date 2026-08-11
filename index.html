@@ -362,8 +362,7 @@ footer{
 
 <script>
 /* ============================================================
-   1) SUPABASE CONFIG — fill this in from your Supabase project
-   Project → Settings → API → "Project URL" and "anon public" key
+   1) SUPABASE CONFIG
    ============================================================ */
 const SUPABASE_URL = "https://yxtdkqafemxssvhucbst.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_7dmWVbAkivCDBUtv1YvCcw_hP1G6x6-";
@@ -479,16 +478,16 @@ if (CONFIG_IS_PLACEHOLDER){
   /* ============================================================
      2) STATE
      ============================================================ */
-  let currentUser = null;   // Supabase auth user
-  let currentDoc  = null;   // profiles row for the current user
-  let allSitters  = [];     // cached babysitter list for the parent feed
+  let currentUser = null;
+  let currentDoc  = null;
+  let allSitters  = [];
   let pendingPhotoFile = null;
   let currentView = 'main';       // 'main' | 'messages' | 'thread'
-  let sitterViewMode = 'view';    // 'view' | 'edit' — only relevant once a babysitter profile is complete
+  let sitterViewMode = 'view';    // 'view' | 'edit'
   let activeThreadUserId = null;
   let activeThreadProfile = null;
   let unreadCount = 0;
-  let viewedSitter = null;   // full profile data for the sitter detail page
+  let viewedSitter = null;
 
   /* ============================================================
      3) SHELL / NAV
@@ -543,10 +542,10 @@ if (CONFIG_IS_PLACEHOLDER){
   }
 
   /* ============================================================
-     4) AUTH VIEW (login / signup)
+     4) AUTH VIEW
      ============================================================ */
   function renderAuth(){
-    let mode = 'login'; // or 'signup'
+    let mode = 'login';
 
     function paint(){
       app.innerHTML = `
@@ -603,7 +602,6 @@ if (CONFIG_IS_PLACEHOLDER){
                 id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'',
                 id_number:'', birth_date:null, address:'', city:''
               });
-              // ignore duplicate-row errors (e.g. row already created by a trigger)
               if (insErr && insErr.code !== '23505') throw insErr;
             }
             if (!data.session){
@@ -759,7 +757,6 @@ if (CONFIG_IS_PLACEHOLDER){
       reader.readAsDataURL(file);
     };
 
-    /* ---- populate day / month / year selects ---- */
     const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
     const daySel = document.getElementById('s-birth-day');
     const monthSel = document.getElementById('s-birth-month');
@@ -793,7 +790,6 @@ if (CONFIG_IS_PLACEHOLDER){
         return;
       }
       const birthDateStr = `${yearV}-${String(monthV).padStart(2,'0')}-${String(dayV).padStart(2,'0')}`;
-      // sanity check the combination is a real calendar date (catches e.g. 31 בפברואר)
       const check = new Date(birthDateStr + 'T00:00:00');
       if (check.getFullYear() != yearV || (check.getMonth()+1) != monthV || check.getDate() != dayV){
         errEl.textContent = 'התאריך שנבחר אינו קיים בלוח השנה — בדקו את היום שנבחר.';
@@ -810,7 +806,7 @@ if (CONFIG_IS_PLACEHOLDER){
           const { error: upErr } = await sb.storage.from('avatars').upload(path, pendingPhotoFile, { upsert:true });
           if (upErr) throw upErr;
           const { data: pub } = sb.storage.from('avatars').getPublicUrl(path);
-          photo_url = pub.publicUrl + '?t=' + Date.now(); // cache-bust so updated photos show immediately
+          photo_url = pub.publicUrl + '?t=' + Date.now();
         }
         const payload = {
           name: document.getElementById('s-name').value.trim(),
@@ -830,7 +826,7 @@ if (CONFIG_IS_PLACEHOLDER){
         toast(isEditing ? 'הפרופיל נשמר בהצלחה!' : 'נרשמת בהצלחה! עכשיו הורים באזור יוכלו לראות את הפרופיל שלך ולפנות אליך.');
         route();
       } catch (err){
-        errEl.textContent = 'שמירת הפרופיל נכשלה: ' + (err?.message || err?.error_description || 'שגיאה לא ידועה') + (err?.hint ? ' — ' + err.hint : '');
+        errEl.textContent = 'שמירת הפרופיל נכשלה: ' + (err?.message || err?.error_description || 'שגיאה לא ידועה');
         errEl.classList.add('show');
         btn.disabled = false;
         btn.textContent = 'שמירת הפרופיל';
@@ -863,7 +859,7 @@ if (CONFIG_IS_PLACEHOLDER){
   }
 
   /* ============================================================
-     6c) PARENT — ONE-TIME NAME SETUP (so sitters know who's messaging them)
+     6c) PARENT — ONE-TIME NAME SETUP
      ============================================================ */
   function renderParentNameSetup(){
     renderShell(`
@@ -1009,7 +1005,7 @@ if (CONFIG_IS_PLACEHOLDER){
   }
 
   /* ============================================================
-     7b) MESSAGING — inbox + thread view
+     7b) MESSAGING
      ============================================================ */
   async function refreshUnreadCount(){
     try {
@@ -1023,7 +1019,7 @@ if (CONFIG_IS_PLACEHOLDER){
       if (badgeHost){
         badgeHost.innerHTML = `${currentDoc.role === 'babysitter' ? 'הודעות' : 'ההודעות שלי'} ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}`;
       }
-    } catch(err){ /* silent — badge just won't update */ }
+    } catch(err){ /* silent */ }
   }
 
   async function fetchConversations(){
@@ -1131,7 +1127,6 @@ if (CONFIG_IS_PLACEHOLDER){
         }).join('');
         box.scrollTop = box.scrollHeight;
       }
-      // mark incoming messages as read
       const unreadIds = data.filter(m => m.receiver_id === currentUser.id && !m.read).map(m => m.id);
       if (unreadIds.length){
         await sb.from('messages').update({ read:true }).in('id', unreadIds);
@@ -1178,14 +1173,14 @@ if (CONFIG_IS_PLACEHOLDER){
   function escapeAttr(str){ return escapeHtml(str); }
 
   /* ============================================================
-     9) ROUTER — decides which view to show based on auth + profile state
+     9) ROUTER
      ============================================================ */
   function route(){
     if (!currentUser){ renderAuth(); return; }
     if (!currentDoc || currentDoc.role == null){ renderRoleSelect(); return; }
 
-    if (currentDoc.role === 'babysitter' && !currentDoc.name){ renderSitterForm(); return; } // first-time setup
-    if (currentDoc.role === 'parent' && !currentDoc.name){ renderParentNameSetup(); return; } // first-time setup
+    if (currentDoc.role === 'babysitter' && !currentDoc.name){ renderSitterForm(); return; }
+    if (currentDoc.role === 'parent' && !currentDoc.name){ renderParentNameSetup(); return; }
 
     if (currentView === 'messages'){ renderMessagesInbox(); return; }
     if (currentView === 'thread'){ renderMessageThread(); return; }
@@ -1200,7 +1195,7 @@ if (CONFIG_IS_PLACEHOLDER){
   }
 
   /* ============================================================
-     10) AUTH STATE LISTENER — entry point
+     10) ENTRY POINT
      ============================================================ */
   renderLoader('טוען את בייבי-לינק...');
 
