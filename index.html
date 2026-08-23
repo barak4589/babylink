@@ -1115,7 +1115,8 @@ if (CONFIG_IS_PLACEHOLDER){
     const citySel = document.getElementById('filter-city');
     const neighSel = document.getElementById('filter-neighborhood');
     const selectedCity = citySel.value;
-    const pool = selectedCity ? allSitters.filter(s => s.city === selectedCity) : allSitters;
+    const selectedCityNorm = normalizeText(selectedCity);
+    const pool = selectedCity ? allSitters.filter(s => normalizeText(s.city) === selectedCityNorm) : allSitters;
     const neighborhoods = Array.from(new Set(pool.map(s => (s.address||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'he'));
     const prevValue = neighSel.value;
     neighSel.innerHTML = '<option value="">כל השכונות</option>' + neighborhoods.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('');
@@ -1141,8 +1142,8 @@ if (CONFIG_IS_PLACEHOLDER){
         const haystack = normalizeText([s.name, s.city, s.address].filter(Boolean).join(' '));
         if (!terms.some(t => haystack.includes(t))) return false;
       }
-      if (cityVal && s.city !== cityVal) return false;
-      if (neighVal && s.address !== neighVal) return false;
+      if (cityVal && normalizeText(s.city) !== normalizeText(cityVal)) return false;
+      if (neighVal && normalizeText(s.address) !== normalizeText(neighVal)) return false;
       if (!isNaN(ageMin) || !isNaN(ageMax)){
         if (!s.birth_date) return false;
         const age = calculateAge(s.birth_date);
@@ -1164,7 +1165,7 @@ if (CONFIG_IS_PLACEHOLDER){
     return `
         <div class="sitter-card" data-uid="${s.id}">
           <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
-          <button class="fav-btn" data-fav-toggle="${s.id}" aria-label="שמירה למועדפים" style="position:absolute; top:12px; left:12px; background:rgba(255,255,255,.85); backdrop-filter:blur(6px); border:1px solid var(--border); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; z-index:2;">${isFav ? '❤️' : '🤍'}</button>
+          <button class="fav-btn" data-fav-toggle="${s.id}" aria-label="שמירה למועדפים" style="position:absolute; top:12px; left:12px; background:#fff; border:1px solid var(--border); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.08);">${heartIconHtml(isFav)}</button>
           <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
             <h3>${escapeHtml(s.name)}</h3>
@@ -1208,15 +1209,15 @@ if (CONFIG_IS_PLACEHOLDER){
         const { error } = await sb.from('favorites').delete().eq('parent_id', currentUser.id).eq('sitter_id', sitterId);
         if (error) throw error;
         favoriteSitterIds.delete(sitterId);
-        if (btnEl) btnEl.textContent = '🤍';
+        if (btnEl) btnEl.innerHTML = heartIconHtml(false);
       } else {
         const { error } = await sb.from('favorites').insert({ parent_id: currentUser.id, sitter_id: sitterId });
         if (error) throw error;
         favoriteSitterIds.add(sitterId);
-        if (btnEl) btnEl.textContent = '❤️';
+        if (btnEl) btnEl.innerHTML = heartIconHtml(true);
       }
     } catch(err){
-      toast('הפעולה נכשלה, נסו שוב', true);
+      toast('שמירת המועדף נכשלה: ' + (err?.message || 'שגיאה לא ידועה'), true);
     }
     if (btnEl) btnEl.disabled = false;
   }
@@ -1281,7 +1282,7 @@ if (CONFIG_IS_PLACEHOLDER){
         <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
         <div class="modal" style="box-shadow:none; max-width:100%;">
           <div class="modal-photo">
-            <button id="detail-fav-btn" style="position:absolute; top:14px; right:14px; background:rgba(255,255,255,.9); border:1px solid var(--border); width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; z-index:2;">${isFav ? '❤️' : '🤍'}</button>
+            <button id="detail-fav-btn" aria-label="שמירה למועדפים" style="position:absolute; top:14px; right:14px; background:#fff; border:1px solid var(--border); width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.1);">${heartIconHtml(isFav)}</button>
             ${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}
           </div>
           <div class="modal-body">
@@ -1539,6 +1540,12 @@ if (CONFIG_IS_PLACEHOLDER){
 
   function initials(name){
     return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  }
+  /* ---- flat 2D heart icon: gray outline when not saved, solid red when saved ---- */
+  function heartIconHtml(isFav){
+    return isFav
+      ? `<svg width="17" height="17" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" stroke-width="1.5"><path d="M12 21s-6.7-4.2-9.3-8.1C1 10.1 1.6 6.6 4.4 5c2.1-1.2 4.6-.6 6 1.1l1.6 1.9 1.6-1.9c1.4-1.7 3.9-2.3 6-1.1 2.8 1.6 3.4 5.1 1.7 7.9C18.7 16.8 12 21 12 21z"/></svg>`
+      : `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.7-4.2-9.3-8.1C1 10.1 1.6 6.6 4.4 5c2.1-1.2 4.6-.6 6 1.1l1.6 1.9 1.6-1.9c1.4-1.7 3.9-2.3 6-1.1 2.8 1.6 3.4 5.1 1.7 7.9C18.7 16.8 12 21 12 21z"/></svg>`;
   }
   function calculateAge(birthDateStr){
     const [y, m, d] = birthDateStr.split('-').map(Number);
