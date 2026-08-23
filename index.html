@@ -212,8 +212,9 @@ h1.page-title{
   width:78px; height:78px; border-radius:50%; overflow:hidden; flex-shrink:0;
   background:var(--bg-soft); border:2px dashed var(--border);
   display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-size:24px;
+  position:relative;
 }
-.photo-preview img{ width:100%; height:100%; object-fit:cover; }
+.photo-preview img{ width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
 .photo-upload-actions{ display:flex; flex-direction:column; gap:6px; }
 .file-btn{
   position:relative; overflow:hidden; display:inline-flex; width:fit-content;
@@ -247,9 +248,9 @@ h1.page-title{
 .sitter-card .photo{
   width:100%; aspect-ratio:4/3; background:linear-gradient(135deg,#F3EEFF,#EAE1FB);
   display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
-  font-size:34px; color:var(--violet-bright); overflow:hidden;
+  font-size:34px; color:var(--violet-bright); overflow:hidden; position:relative;
 }
-.sitter-card .photo img{ width:100%; height:100%; object-fit:cover; }
+.sitter-card .photo img{ width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
 .sitter-card .body{ padding:16px 16px 18px; }
 .sitter-card h3{ font-family:var(--font-display); font-size:16.5px; margin-bottom:4px; }
 .sitter-card .loc{
@@ -289,7 +290,7 @@ h1.page-title{
   display:flex; align-items:center; justify-content:center; font-family:var(--font-display);
   font-size:52px; color:var(--violet-bright); position:relative; overflow:hidden;
 }
-.modal-photo img{ width:100%; height:100%; object-fit:cover; }
+.modal-photo img{ width:100%; height:100%; object-fit:cover; position:absolute; inset:0; }
 .modal-close{
   position:absolute; top:14px; left:14px; width:34px; height:34px; border-radius:50%;
   background:rgba(11,9,16,.65); border:1px solid rgba(255,255,255,.15); color:#fff;
@@ -407,6 +408,7 @@ function renderSetupNotice(){
   birth_date date,
   address text default '',
   city text default '',
+  parental_consent boolean default false,
   created_at timestamptz default now()
 );
 
@@ -691,7 +693,7 @@ if (CONFIG_IS_PLACEHOLDER){
         <p class="page-sub">הפרטים האלה יוצגו להורים באזור שלך. ככל שהפרופיל מלא יותר — כך קל יותר להורים לבחור בכם.</p>
 
         <div class="photo-upload">
-          <div class="photo-preview" id="photo-preview">${d.photo_url ? `<img src="${d.photo_url}" alt="">` : '📷'}</div>
+          <div class="photo-preview" id="photo-preview">📷${d.photo_url ? `<img src="${d.photo_url}" alt="" onerror="this.remove()">` : ''}</div>
           <div class="photo-upload-actions">
             <div class="btn btn-ghost file-btn">
               בחירת תמונת פרופיל
@@ -724,10 +726,16 @@ if (CONFIG_IS_PLACEHOLDER){
               <select id="s-birth-year" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
             </div>
           </div>
+          <div class="field" id="consent-field" style="display:none; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px 16px;">
+            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin:0;">
+              <input type="checkbox" id="s-parental-consent" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;">
+              <span style="font-size:13.5px; color:var(--text); line-height:1.5;">אני מאשר/ת כי קיבלתי את הסכמת ההורה/האפוטרופוס שלי להירשם כבייביסיטר באפליקציית בייבי-לינק, בהתאם לגילי.</span>
+            </label>
+          </div>
           <div class="field">
-            <label for="s-address">כתובת מגורים</label>
-            <input type="text" id="s-address" placeholder="לדוגמה: הרצל 12" value="${escapeAttr(d.address)}" required>
-            <div class="field-hint">🔒 הכתובת המדויקת נשמרת פרטית ולא מוצגת להורים — רק העיר תוצג בפרופיל הציבורי.</div>
+            <label for="s-address">שכונת מגורים</label>
+            <input type="text" id="s-address" placeholder="לדוגמה: שכונה ד'" value="${escapeAttr(d.address)}" required>
+            <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר.</div>
           </div>
           <div class="field">
             <label for="s-city">עיר</label>
@@ -770,8 +778,10 @@ if (CONFIG_IS_PLACEHOLDER){
       Array.from({length:31}, (_,i)=>i+1).map(n=>`<option value="${n}">${n}</option>`).join('');
     monthSel.innerHTML = '<option value="">חודש</option>' +
       HEBREW_MONTHS.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+    // range covers from this year (age 0) back 100 years — recalculated fresh from today's date on every load,
+    // so it automatically includes recent years now and shifts forward on its own in future years (e.g. 2036).
     yearSel.innerHTML = '<option value="">שנה</option>' +
-      Array.from({length:100}, (_,i)=>thisYear-14-i).map(y=>`<option value="${y}">${y}</option>`).join('');
+      Array.from({length:100}, (_,i)=>thisYear-i).map(y=>`<option value="${y}">${y}</option>`).join('');
 
     if (d.birth_date){
       const [by, bm, bd] = String(d.birth_date).split('-');
@@ -779,6 +789,29 @@ if (CONFIG_IS_PLACEHOLDER){
       if (bm) monthSel.value = String(parseInt(bm,10));
       if (bd) daySel.value = String(parseInt(bd,10));
     }
+
+    /* ---- live-toggle the parental consent checkbox as soon as a full, valid birth date implies age < 16 ---- */
+    const consentField = document.getElementById('consent-field');
+    const consentCheckbox = document.getElementById('s-parental-consent');
+    function updateConsentVisibility(){
+      const dv = daySel.value, mv = monthSel.value, yv = yearSel.value;
+      if (!dv || !mv || !yv){ consentField.style.display = 'none'; consentCheckbox.required = false; return; }
+      const dateStr = `${yv}-${String(mv).padStart(2,'0')}-${String(dv).padStart(2,'0')}`;
+      const valid = new Date(dateStr + 'T00:00:00');
+      if (valid.getFullYear() != yv || (valid.getMonth()+1) != mv || valid.getDate() != dv){
+        consentField.style.display = 'none'; consentCheckbox.required = false; return;
+      }
+      const age = calculateAge(dateStr);
+      if (age >= 14 && age < 16){
+        consentField.style.display = 'block';
+        consentCheckbox.required = true;
+      } else {
+        consentField.style.display = 'none';
+        consentCheckbox.required = false;
+      }
+    }
+    [daySel, monthSel, yearSel].forEach(sel => sel.addEventListener('change', updateConsentVisibility));
+    updateConsentVisibility(); // in case editing an existing profile with a pre-filled birth date
 
     document.getElementById('sitter-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -801,19 +834,23 @@ if (CONFIG_IS_PLACEHOLDER){
         return;
       }
 
-      /* ---- age gate: under 14 blocked · 14-15 needs parental consent (coming soon) · 16+ proceeds normally ---- */
+      /* ---- age gate: under 14 blocked · under 16 (e.g. 14–15.9) requires parental consent checkbox · 16+ proceeds normally ---- */
       const age = calculateAge(birthDateStr);
+      let parental_consent = false;
       if (age < 14){
         errEl.textContent = '🚫 לא ניתן להירשם לבייבי-לינק מתחת לגיל 14.';
         errEl.classList.add('show');
         return;
       }
-      if (age >= 14 && age <= 15){
-        errEl.textContent = '👨‍👩‍👧 בגילאי 14–15 נדרש אישור הורים כדי להירשם. תהליך אישור ההורים עדיין בבנייה ויתווסף בקרוב — לא ניתן להשלים את ההרשמה כרגע. נא לנסות שוב מאוחר יותר.';
-        errEl.classList.add('show');
-        return;
+      if (age < 16){
+        if (!consentCheckbox.checked){
+          errEl.textContent = '👨‍👩‍👧 מתחת לגיל 16 יש לאשר את תיבת הסכמת ההורים לפני ההרשמה.';
+          errEl.classList.add('show');
+          return;
+        }
+        parental_consent = true;
       }
-      // age >= 16 → proceed exactly as usual, no extra step
+      // age >= 16 → proceeds exactly as usual, no extra step
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
@@ -821,7 +858,7 @@ if (CONFIG_IS_PLACEHOLDER){
         let photo_url = d.photo_url || '';
         if (pendingPhotoFile){
           const path = `${currentUser.id}.jpg`;
-          const { error: upErr } = await sb.storage.from('avatars').upload(path, pendingPhotoFile, { upsert:true });
+          const { error: upErr } = await sb.storage.from('avatars').upload(path, pendingPhotoFile, { upsert:true, contentType: pendingPhotoFile.type || 'image/jpeg' });
           if (upErr) throw upErr;
           const { data: pub } = sb.storage.from('avatars').getPublicUrl(path);
           photo_url = pub.publicUrl + '?t=' + Date.now(); // cache-bust so updated photos show immediately
@@ -835,6 +872,7 @@ if (CONFIG_IS_PLACEHOLDER){
           city: document.getElementById('s-city').value.trim(),
           bio: document.getElementById('s-bio').value.trim(),
           photo_url,
+          parental_consent,
           role: 'babysitter'
         };
         const { error } = await sb.from('profiles').update(payload).eq('id', currentUser.id);
@@ -863,10 +901,10 @@ if (CONFIG_IS_PLACEHOLDER){
         <h1 class="page-title">כך ההורים רואים אותך</h1>
         <p class="page-sub">זו התצוגה הציבורית של הפרופיל שלך בפיד להורים.</p>
         <div class="sitter-card" style="cursor:default;">
-          <div class="photo">${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}">` : initials(d.name)}</div>
+          <div class="photo">${initials(d.name)}${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
             <h3>${escapeHtml(d.name)}</h3>
-            <div class="loc">📍 ${escapeHtml(d.city||'')}</div>
+            <div class="loc">📍 ${escapeHtml([d.city, d.address].filter(Boolean).join(', '))}</div>
             <p class="bio-preview" style="-webkit-line-clamp:initial;">${escapeHtml(d.bio||'')}</p>
           </div>
         </div>
@@ -949,7 +987,7 @@ if (CONFIG_IS_PLACEHOLDER){
     document.getElementById('sitter-search').oninput = (e) => {
       const q = e.target.value.trim().toLowerCase();
       const filtered = allSitters.filter(s =>
-        s.name.toLowerCase().includes(q) || (s.city||'').toLowerCase().includes(q)
+        s.name.toLowerCase().includes(q) || (s.city||'').toLowerCase().includes(q) || (s.address||'').toLowerCase().includes(q)
       );
       paintSitterGrid(filtered);
     };
@@ -970,10 +1008,10 @@ if (CONFIG_IS_PLACEHOLDER){
       ${list.map((s,i) => `
         <div class="sitter-card" data-idx="${i}">
           <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
-          <div class="photo">${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}</div>
+          <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
             <h3>${escapeHtml(s.name)}</h3>
-            <div class="loc">📍 ${escapeHtml(s.city||'')}</div>
+            <div class="loc">📍 ${escapeHtml([s.city, s.address].filter(Boolean).join(', '))}</div>
             <p class="bio-preview">${escapeHtml(s.bio||'')}</p>
           </div>
         </div>
@@ -998,11 +1036,11 @@ if (CONFIG_IS_PLACEHOLDER){
         <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
         <div class="modal" style="box-shadow:none; max-width:100%;">
           <div class="modal-photo">
-            ${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}">` : initials(s.name)}
+            ${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}
           </div>
           <div class="modal-body">
             <h2>${escapeHtml(s.name)}</h2>
-            <div class="modal-loc">📍 ${escapeHtml(s.city||'')}</div>
+            <div class="modal-loc">📍 ${escapeHtml([s.city, s.address].filter(Boolean).join(', '))}</div>
             <p class="modal-bio">${escapeHtml(s.bio||'')}</p>
             <div class="modal-actions">
               <a class="btn btn-primary" style="flex:1;" href="tel:${escapeAttr(s.phone)}">📞 התקשרות</a>
@@ -1089,7 +1127,7 @@ if (CONFIG_IS_PLACEHOLDER){
     wrap.innerHTML = convos.map(c => `
       <div class="sitter-card" data-id="${c.otherId}" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; margin-bottom:12px; cursor:pointer;">
         <div class="photo" style="width:54px; height:54px; aspect-ratio:1; border-radius:50%; flex-shrink:0;">
-          ${c.profile.photo_url ? `<img src="${c.profile.photo_url}" alt="">` : initials(c.profile.name)}
+          ${initials(c.profile.name)}${c.profile.photo_url ? `<img src="${c.profile.photo_url}" alt="" onerror="this.remove()">` : ''}
         </div>
         <div style="flex:1; overflow:hidden;">
           <h3 style="margin-bottom:2px;">${escapeHtml(c.profile.name || 'משתמש')}</h3>
