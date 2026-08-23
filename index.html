@@ -447,7 +447,25 @@ create policy "Users can view their own conversations"
 
 create policy "Users can mark their received messages as read"
   on messages for update
-  using ( receiver_id = auth.uid() );</pre>
+  using ( receiver_id = auth.uid() );
+
+create table favorites (
+  parent_id uuid references auth.users on delete cascade not null,
+  sitter_id uuid references auth.users on delete cascade not null,
+  created_at timestamptz default now(),
+  primary key (parent_id, sitter_id)
+);
+
+alter table favorites enable row level security;
+
+create policy "Parents manage their own favorites"
+  on favorites for all
+  using ( parent_id = auth.uid() )
+  with check ( parent_id = auth.uid() );
+
+create policy "Sitters can see their own favorite count"
+  on favorites for select
+  using ( sitter_id = auth.uid() );</pre>
         <p>3. בתפריט הצד: <code>Storage</code> → <code>New bucket</code> → שם הדלי: <code>avatars</code> → סמנו <b>Public bucket</b> → Create.</p>
         <p>4. עדיין ב-Storage, לכו לטאב <code>Policies</code> והריצו ב-SQL Editor גם את חוקי ההעלאה:</p>
         <pre>create policy "Authenticated users can upload avatars"
@@ -485,12 +503,13 @@ if (CONFIG_IS_PLACEHOLDER){
   let currentDoc  = null;   // profiles row for the current user
   let allSitters  = [];     // cached babysitter list for the parent feed
   let pendingPhotoFile = null;
-  let currentView = 'main';       // 'main' | 'messages' | 'thread'
+  let currentView = 'main';       // 'main' | 'messages' | 'thread' | 'favorites'
   let sitterViewMode = 'view';    // 'view' | 'edit' — only relevant once a babysitter profile is complete
   let activeThreadUserId = null;
   let activeThreadProfile = null;
   let unreadCount = 0;
   let viewedSitter = null;   // full profile data for the sitter detail page
+  let favoriteSitterIds = new Set(); // sitter ids the current parent has saved (♥)
 
   /* ============================================================
      3) SHELL / NAV
@@ -508,6 +527,7 @@ if (CONFIG_IS_PLACEHOLDER){
     } else if (showNav && role === 'parent' && currentDoc?.name){
       navButtons = `
         <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">בייביסיטרים</button>
+        <button class="btn ${currentView==='favorites'?'btn-primary':'btn-ghost'}" id="nav-favorites" style="padding:9px 16px;font-size:13.5px;">❤️ מועדפים</button>
         <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
           ההודעות שלי ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}
         </button>`;
@@ -534,8 +554,10 @@ if (CONFIG_IS_PLACEHOLDER){
       document.getElementById('btn-signout').onclick = () => sb.auth.signOut();
       const navProfile = document.getElementById('nav-profile');
       const navMessages = document.getElementById('nav-messages');
+      const navFavorites = document.getElementById('nav-favorites');
       if (navProfile) navProfile.onclick = () => { currentView='main'; sitterViewMode='view'; route(); };
       if (navMessages) navMessages.onclick = () => { currentView='messages'; route(); };
+      if (navFavorites) navFavorites.onclick = () => { currentView='favorites'; route(); };
     }
     if (showNav) refreshUnreadCount();
   }
@@ -900,6 +922,9 @@ if (CONFIG_IS_PLACEHOLDER){
         <div class="eyebrow">הפרופיל שלי</div>
         <h1 class="page-title">כך ההורים רואים אותך</h1>
         <p class="page-sub">זו התצוגה הציבורית של הפרופיל שלך בפיד להורים.</p>
+        <div id="fav-count-badge" style="display:inline-flex; align-items:center; gap:7px; background:var(--surface-2); border:1px solid var(--border); border-radius:100px; padding:7px 16px; font-size:13.5px; color:var(--text-muted); margin-bottom:16px;">
+          <span class="spinner" style="width:13px;height:13px;border-width:2px;"></span> טוען...
+        </div>
         <div class="sitter-card" style="cursor:default;">
           <div class="photo">${initials(d.name)}${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
@@ -912,22 +937,38 @@ if (CONFIG_IS_PLACEHOLDER){
       </div>
     `);
     document.getElementById('btn-edit-profile').onclick = () => { sitterViewMode = 'edit'; route(); };
+
+    sb.from('favorites').select('parent_id', { count:'exact', head:true }).eq('sitter_id', currentUser.id)
+      .then(({ count, error }) => {
+        const badge = document.getElementById('fav-count-badge');
+        if (!badge) return; // user navigated away before this resolved
+        if (error){ badge.style.display = 'none'; return; }
+        const n = count || 0;
+        badge.innerHTML = n > 0
+          ? `❤️ ${n} הורים שמרו אותך למועדפים`
+          : `🤍 עדיין אין הורים ששמרו אותך למועדפים`;
+      });
   }
 
   /* ============================================================
-     6c) PARENT — ONE-TIME NAME SETUP (so sitters know who's messaging them)
+     6c) PARENT — ONE-TIME SETUP: name + city (so sitters know who's messaging, and the feed can prioritize your city)
      ============================================================ */
   function renderParentNameSetup(){
+    const d = currentDoc || {};
     renderShell(`
       <div class="view-narrow">
         <div class="eyebrow">שלב אחרון</div>
-        <h1 class="page-title">איך לקרוא לך?</h1>
-        <p class="page-sub">השם הזה יוצג לבייביסיטרים כשתשלחו הודעה דרך האפליקציה.</p>
+        <h1 class="page-title">כמה פרטים לפני שממשיכים</h1>
+        <p class="page-sub">השם יוצג לבייביסיטרים כשתשלחו הודעה, והעיר תעזור לנו להראות לכם קודם בייביסיטרים קרובים אליכם.</p>
         <div class="form-error" id="parent-name-error"></div>
         <form id="parent-name-form">
           <div class="field">
             <label for="p-name">שם מלא</label>
-            <input type="text" id="p-name" placeholder="לדוגמה: דנה לוי" required>
+            <input type="text" id="p-name" placeholder="לדוגמה: דנה לוי" value="${escapeAttr(d.name)}" required>
+          </div>
+          <div class="field">
+            <label for="p-city">עיר מגורים</label>
+            <input type="text" id="p-city" placeholder="לדוגמה: באר שבע" value="${escapeAttr(d.city)}" required>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="parent-name-submit">המשך</button>
         </form>
@@ -939,12 +980,13 @@ if (CONFIG_IS_PLACEHOLDER){
       const btn = document.getElementById('parent-name-submit');
       errEl.classList.remove('show');
       const name = document.getElementById('p-name').value.trim();
+      const city = document.getElementById('p-city').value.trim();
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        const { error } = await sb.from('profiles').update({ name }).eq('id', currentUser.id);
+        const { error } = await sb.from('profiles').update({ name, city }).eq('id', currentUser.id);
         if (error) throw error;
-        currentDoc = { ...currentDoc, name };
+        currentDoc = { ...currentDoc, name, city };
         route();
       } catch(err){
         errEl.textContent = 'השמירה נכשלה: ' + (err?.message || 'שגיאה לא ידועה');
@@ -982,11 +1024,12 @@ if (CONFIG_IS_PLACEHOLDER){
         <div class="empty-state"><div class="icon">⚠️</div><h3>לא הצלחנו לטעון את הרשימה</h3><p>נסו לרענן את הדף.</p></div>`;
       return;
     }
+    await loadFavorites();
 
-    paintSitterGrid(allSitters);
+    paintSitterGridGrouped();
     document.getElementById('sitter-search').oninput = (e) => {
       const raw = e.target.value.trim();
-      if (!raw){ paintSitterGrid(allSitters); return; }
+      if (!raw){ paintSitterGridGrouped(); return; }
       const terms = expandSearchTerms(raw);
       const filtered = allSitters.filter(s => {
         const haystack = normalizeText([s.name, s.city, s.address].filter(Boolean).join(' '));
@@ -994,6 +1037,98 @@ if (CONFIG_IS_PLACEHOLDER){
       });
       paintSitterGrid(filtered);
     };
+  }
+
+  /* ---- default feed view: sitters from the parent's own city first, then everyone else ---- */
+  function paintSitterGridGrouped(){
+    const wrap = document.getElementById('sitter-grid-wrap');
+    if (!allSitters.length){
+      wrap.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🧸</div>
+          <h3>עדיין אין בייביסיטרים רשומים</h3>
+          <p>חזרו לבדוק שוב בקרוב.</p>
+        </div>`;
+      return;
+    }
+    const myCity = currentDoc.city || '';
+    const same = [];
+    const other = [];
+    allSitters.forEach(s => { (myCity && citiesMatch(s.city, myCity)) ? same.push(s) : other.push(s); });
+
+    let html = '';
+    if (same.length){
+      html += `<div class="eyebrow" style="margin-top:4px;">בעיר שלך — ${escapeHtml(myCity)}</div>`;
+      html += `<div class="sitter-grid" style="margin-bottom:${other.length?32:0}px;">${same.map(sitterCardHtml).join('')}</div>`;
+    }
+    if (other.length){
+      html += `<div class="eyebrow" style="margin-top:${same.length?0:4}px;">${same.length ? 'בייביסיטרים באזורים נוספים' : 'כל הבייביסיטרים'}</div>`;
+      html += `<div class="sitter-grid">${other.map(sitterCardHtml).join('')}</div>`;
+    }
+    wrap.innerHTML = html;
+    attachSitterCardHandlers(wrap, same.concat(other));
+  }
+
+  function sitterCardHtml(s){
+    const isFav = favoriteSitterIds.has(s.id);
+    return `
+        <div class="sitter-card" data-uid="${s.id}">
+          <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
+          <button class="fav-btn" data-fav-toggle="${s.id}" aria-label="שמירה למועדפים" style="position:absolute; top:12px; left:12px; background:rgba(255,255,255,.85); backdrop-filter:blur(6px); border:1px solid var(--border); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; z-index:2;">${isFav ? '❤️' : '🤍'}</button>
+          <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
+          <div class="body">
+            <h3>${escapeHtml(s.name)}</h3>
+            <div class="loc">📍 ${escapeHtml([s.city, s.address].filter(Boolean).join(', '))}</div>
+            <p class="bio-preview">${escapeHtml(s.bio||'')}</p>
+          </div>
+        </div>`;
+  }
+
+  function attachSitterCardHandlers(container, list){
+    const byId = new Map(list.map(s => [s.id, s]));
+    container.querySelectorAll('.sitter-card').forEach(card => {
+      card.onclick = (e) => {
+        if (e.target.closest('[data-fav-toggle]')) return;
+        goToSitterDetail(byId.get(card.dataset.uid));
+      };
+    });
+    container.querySelectorAll('[data-fav-toggle]').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        await toggleFavorite(btn.dataset.favToggle, btn);
+        if (currentView === 'favorites') route();
+      };
+    });
+  }
+
+  async function loadFavorites(){
+    if (!currentUser || currentDoc?.role !== 'parent') return;
+    try {
+      const { data, error } = await sb.from('favorites').select('sitter_id').eq('parent_id', currentUser.id);
+      if (error) throw error;
+      favoriteSitterIds = new Set((data||[]).map(f => f.sitter_id));
+    } catch(err){ /* badge/hearts just won't reflect saved state */ }
+  }
+
+  async function toggleFavorite(sitterId, btnEl){
+    const isFav = favoriteSitterIds.has(sitterId);
+    if (btnEl) btnEl.disabled = true;
+    try {
+      if (isFav){
+        const { error } = await sb.from('favorites').delete().eq('parent_id', currentUser.id).eq('sitter_id', sitterId);
+        if (error) throw error;
+        favoriteSitterIds.delete(sitterId);
+        if (btnEl) btnEl.textContent = '🤍';
+      } else {
+        const { error } = await sb.from('favorites').insert({ parent_id: currentUser.id, sitter_id: sitterId });
+        if (error) throw error;
+        favoriteSitterIds.add(sitterId);
+        if (btnEl) btnEl.textContent = '❤️';
+      }
+    } catch(err){
+      toast('הפעולה נכשלה, נסו שוב', true);
+    }
+    if (btnEl) btnEl.disabled = false;
   }
 
   function paintSitterGrid(list){
@@ -1007,22 +1142,38 @@ if (CONFIG_IS_PLACEHOLDER){
         </div>`;
       return;
     }
-    wrap.innerHTML = `<div class="sitter-grid">
-      ${list.map((s,i) => `
-        <div class="sitter-card" data-idx="${i}">
-          <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
-          <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
-          <div class="body">
-            <h3>${escapeHtml(s.name)}</h3>
-            <div class="loc">📍 ${escapeHtml([s.city, s.address].filter(Boolean).join(', '))}</div>
-            <p class="bio-preview">${escapeHtml(s.bio||'')}</p>
-          </div>
-        </div>
-      `).join('')}
-    </div>`;
-    wrap.querySelectorAll('.sitter-card').forEach(card => {
-      card.onclick = () => goToSitterDetail(list[+card.dataset.idx]);
-    });
+    wrap.innerHTML = `<div class="sitter-grid">${list.map(sitterCardHtml).join('')}</div>`;
+    attachSitterCardHandlers(wrap, list);
+  }
+
+  /* ============================================================
+     7c) PARENT — FAVORITES VIEW
+     ============================================================ */
+  async function renderFavoritesView(){
+    renderShell(`
+      <div class="eyebrow">מועדפים</div>
+      <h1 class="page-title">בייביסיטרים ששמרתם ❤️</h1>
+      <div id="sitter-grid-wrap"><div class="page-loader"><div class="spinner"></div><span>טוען...</span></div></div>
+    `);
+    await loadFavorites();
+    const wrap = document.getElementById('sitter-grid-wrap');
+    if (!favoriteSitterIds.size){
+      wrap.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">🤍</div>
+          <h3>עדיין לא שמרתם אף בייביסיטר</h3>
+          <p>לחצו על סמל הלב בכרטיסיית בייביסיטר או בעמוד הפרופיל שלו/ה כדי לשמור אותו כאן לגישה מהירה.</p>
+        </div>`;
+      return;
+    }
+    try {
+      const ids = Array.from(favoriteSitterIds);
+      const { data, error } = await sb.from('profiles').select('*').in('id', ids);
+      if (error) throw error;
+      paintSitterGrid(data || []);
+    } catch(err){
+      wrap.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>לא הצלחנו לטעון את הרשימה</h3><p>נסו לרענן את הדף.</p></div>`;
+    }
   }
 
   function goToSitterDetail(s){
@@ -1034,11 +1185,13 @@ if (CONFIG_IS_PLACEHOLDER){
   function renderSitterDetailPage(){
     const s = viewedSitter;
     if (!s){ currentView = 'main'; route(); return; }
+    const isFav = favoriteSitterIds.has(s.id);
     renderShell(`
       <div class="view-narrow" style="max-width:560px;">
         <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
         <div class="modal" style="box-shadow:none; max-width:100%;">
           <div class="modal-photo">
+            <button id="detail-fav-btn" style="position:absolute; top:14px; right:14px; background:rgba(255,255,255,.9); border:1px solid var(--border); width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; z-index:2;">${isFav ? '❤️' : '🤍'}</button>
             ${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}
           </div>
           <div class="modal-body">
@@ -1060,6 +1213,9 @@ if (CONFIG_IS_PLACEHOLDER){
       activeThreadProfile = s;
       currentView = 'thread';
       route();
+    };
+    document.getElementById('detail-fav-btn').onclick = async (e) => {
+      await toggleFavorite(s.id, e.currentTarget);
     };
   }
 
@@ -1304,11 +1460,12 @@ if (CONFIG_IS_PLACEHOLDER){
     if (!currentDoc || currentDoc.role == null){ renderRoleSelect(); return; }
 
     if (currentDoc.role === 'babysitter' && !currentDoc.name){ renderSitterForm(); return; } // first-time setup
-    if (currentDoc.role === 'parent' && !currentDoc.name){ renderParentNameSetup(); return; } // first-time setup
+    if (currentDoc.role === 'parent' && (!currentDoc.name || !currentDoc.city)){ renderParentNameSetup(); return; } // first-time setup
 
     if (currentView === 'messages'){ renderMessagesInbox(); return; }
     if (currentView === 'thread'){ renderMessageThread(); return; }
     if (currentView === 'sitter-detail'){ renderSitterDetailPage(); return; }
+    if (currentView === 'favorites'){ renderFavoritesView(); return; }
 
     if (currentDoc.role === 'babysitter'){
       if (sitterViewMode === 'edit'){ renderSitterForm(); } else { renderSitterProfileView(); }
