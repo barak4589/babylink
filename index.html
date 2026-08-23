@@ -985,10 +985,13 @@ if (CONFIG_IS_PLACEHOLDER){
 
     paintSitterGrid(allSitters);
     document.getElementById('sitter-search').oninput = (e) => {
-      const q = e.target.value.trim().toLowerCase();
-      const filtered = allSitters.filter(s =>
-        s.name.toLowerCase().includes(q) || (s.city||'').toLowerCase().includes(q) || (s.address||'').toLowerCase().includes(q)
-      );
+      const raw = e.target.value.trim();
+      if (!raw){ paintSitterGrid(allSitters); return; }
+      const terms = expandSearchTerms(raw);
+      const filtered = allSitters.filter(s => {
+        const haystack = normalizeText([s.name, s.city, s.address].filter(Boolean).join(' '));
+        return terms.some(t => haystack.includes(t));
+      });
       paintSitterGrid(filtered);
     };
   }
@@ -1218,6 +1221,62 @@ if (CONFIG_IS_PLACEHOLDER){
   /* ============================================================
      8) HELPERS
      ============================================================ */
+
+  /* ---- Hebrew ⇄ English city name aliases, so searching in one language
+         also matches profiles whose city was typed in the other language ---- */
+  const CITY_ALIASES = [
+    ['באר שבע','beer sheva','beersheba',"be'er sheva",'באר-שבע'],
+    ['תל אביב','תל אביב יפו','tel aviv','tel-aviv','tel aviv yafo'],
+    ['ירושלים','jerusalem'],
+    ['חיפה','haifa'],
+    ['אשדוד','ashdod'],
+    ['אשקלון','ashkelon','ashqelon'],
+    ['נתניה','netanya','natanya'],
+    ['ראשון לציון','rishon lezion',"rishon leziyon",'rishon letzion'],
+    ['פתח תקווה','פתח תקוה','petah tikva','petach tikva','petah tikvah'],
+    ['חולון','holon'],
+    ['בת ים','bat yam'],
+    ['רחובות','rehovot','rechovot'],
+    ['רמת גן','ramat gan'],
+    ['הרצליה','herzliya','herzliyya'],
+    ['כפר סבא','kfar saba','kfar sava'],
+    ['רעננה','raanana',"ra'anana"],
+    ['מודיעין','modiin',"modi'in",'modi in'],
+    ['אילת','eilat','elat'],
+    ['נהריה','nahariya','nahariyya'],
+    ['עפולה','afula'],
+    ['דימונה','dimona'],
+    ["קריית גת",'kiryat gat','qiryat gat'],
+    ["קריית שמונה",'kiryat shmona','qiryat shmona'],
+    ['לוד','lod'],
+    ['רמלה','ramla','ramle'],
+    ['טבריה','tiberias','teverya'],
+    ['בית שמש','beit shemesh','bet shemesh'],
+    ['אופקים','ofakim'],
+    ['נתיבות','netivot'],
+    ['שדרות','sderot'],
+    ['ערד','arad'],
+    ['ירוחם','yeruham','yerucham'],
+    ['אריאל','ariel'],
+    ['גבעתיים','givatayim'],
+    ['כרמיאל','karmiel','carmiel'],
+  ];
+  function normalizeText(s){
+    return (s||'').toString().toLowerCase().replace(/['’\-]/g,'').replace(/\s+/g,' ').trim();
+  }
+  function expandSearchTerms(query){
+    const nq = normalizeText(query);
+    const terms = new Set();
+    if (nq) terms.add(nq);
+    CITY_ALIASES.forEach(group => {
+      const normGroup = group.map(normalizeText);
+      if (normGroup.some(a => a && (a.includes(nq) || nq.includes(a)))){
+        normGroup.forEach(a => terms.add(a));
+      }
+    });
+    return Array.from(terms);
+  }
+
   function initials(name){
     return (name||'?').trim().split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   }
