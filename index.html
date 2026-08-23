@@ -1004,69 +1004,140 @@ if (CONFIG_IS_PLACEHOLDER){
     renderShell(`
       <div class="feed-head">
         <div>
-          <div class="eyebrow">${allSitters.length} בייביסיטרים רשומים</div>
+          <div class="eyebrow" id="feed-count-eyebrow">בייביסיטרים רשומים</div>
           <h1 class="page-title" style="margin-bottom:0;">בייביסיטרים באזור שלך</h1>
         </div>
         <div class="search-box">
-          <input type="text" id="sitter-search" placeholder="חיפוש לפי שם או אזור...">
+          <input type="text" id="sitter-search" placeholder="חיפוש לפי שם...">
           <span class="ic">⌕</span>
         </div>
       </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:24px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);">
+        <div style="flex:1; min-width:130px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">עיר</label>
+          <select id="filter-city" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+            <option value="">כל הערים</option>
+          </select>
+        </div>
+        <div style="flex:1; min-width:130px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">שכונה</label>
+          <select id="filter-neighborhood" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+            <option value="">כל השכונות</option>
+          </select>
+        </div>
+        <div style="min-width:85px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">מגיל</label>
+          <input type="number" id="filter-age-min" min="14" max="100" placeholder="14" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+        </div>
+        <div style="min-width:85px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">עד גיל</label>
+          <input type="number" id="filter-age-max" min="14" max="100" placeholder="100" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+        </div>
+        <div style="flex:1; min-width:170px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">אישור הורים</label>
+          <select id="filter-consent" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+            <option value="">הכל</option>
+            <option value="yes">קטין/ה עם אישור הורים</option>
+            <option value="no">אין צורך באישור (16+)</option>
+          </select>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+          <button class="btn btn-ghost" id="filter-clear" style="padding:9px 16px; font-size:13.5px;">איפוס סינון</button>
+        </div>
+      </div>
+
       <div id="sitter-grid-wrap"><div class="page-loader"><div class="spinner"></div><span>טוען בייביסיטרים...</span></div></div>
     `);
 
     try {
-      const { data, error } = await sb.from('profiles').select('*').eq('role','babysitter');
-      if (error) throw error;
-      allSitters = (data || []).filter(s => s.name);
+      // fetch the sitter list and the parent's saved favorites in parallel (faster than doing them one after another),
+      // and only request the columns the feed actually needs — id_number is never sent to a parent's browser.
+      const [sittersRes] = await Promise.all([
+        sb.from('profiles')
+          .select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,role')
+          .eq('role', 'babysitter'),
+        loadFavorites()
+      ]);
+      if (sittersRes.error) throw sittersRes.error;
+      allSitters = (sittersRes.data || []).filter(s => s.name);
     } catch(err){
       document.getElementById('sitter-grid-wrap').innerHTML = `
         <div class="empty-state"><div class="icon">⚠️</div><h3>לא הצלחנו לטעון את הרשימה</h3><p>נסו לרענן את הדף.</p></div>`;
       return;
     }
-    await loadFavorites();
 
-    paintSitterGridGrouped();
-    document.getElementById('sitter-search').oninput = (e) => {
-      const raw = e.target.value.trim();
-      if (!raw){ paintSitterGridGrouped(); return; }
-      const terms = expandSearchTerms(raw);
-      const filtered = allSitters.filter(s => {
-        const haystack = normalizeText([s.name, s.city, s.address].filter(Boolean).join(' '));
-        return terms.some(t => haystack.includes(t));
-      });
-      paintSitterGrid(filtered);
+    populateFeedFilterOptions();
+    applyFeedFilters();
+
+    document.getElementById('sitter-search').oninput = applyFeedFilters;
+    document.getElementById('filter-city').onchange = () => { populateNeighborhoodOptions(); applyFeedFilters(); };
+    document.getElementById('filter-neighborhood').onchange = applyFeedFilters;
+    document.getElementById('filter-age-min').oninput = applyFeedFilters;
+    document.getElementById('filter-age-max').oninput = applyFeedFilters;
+    document.getElementById('filter-consent').onchange = applyFeedFilters;
+    document.getElementById('filter-clear').onclick = () => {
+      document.getElementById('sitter-search').value = '';
+      document.getElementById('filter-city').value = '';
+      document.getElementById('filter-age-min').value = '';
+      document.getElementById('filter-age-max').value = '';
+      document.getElementById('filter-consent').value = '';
+      populateNeighborhoodOptions();
+      applyFeedFilters();
     };
   }
 
-  /* ---- default feed view: sitters from the parent's own city first, then everyone else ---- */
-  function paintSitterGridGrouped(){
-    const wrap = document.getElementById('sitter-grid-wrap');
-    if (!allSitters.length){
-      wrap.innerHTML = `
-        <div class="empty-state">
-          <div class="icon">🧸</div>
-          <h3>עדיין אין בייביסיטרים רשומים</h3>
-          <p>חזרו לבדוק שוב בקרוב.</p>
-        </div>`;
-      return;
-    }
-    const myCity = currentDoc.city || '';
-    const same = [];
-    const other = [];
-    allSitters.forEach(s => { (myCity && citiesMatch(s.city, myCity)) ? same.push(s) : other.push(s); });
+  /* ---- manual filter panel: populate city/neighborhood dropdowns from the loaded sitters ---- */
+  function populateFeedFilterOptions(){
+    const citySel = document.getElementById('filter-city');
+    const cities = Array.from(new Set(allSitters.map(s => (s.city||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'he'));
+    citySel.innerHTML = '<option value="">כל הערים</option>' + cities.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
+    populateNeighborhoodOptions();
+  }
 
-    let html = '';
-    if (same.length){
-      html += `<div class="eyebrow" style="margin-top:4px;">בעיר שלך — ${escapeHtml(myCity)}</div>`;
-      html += `<div class="sitter-grid" style="margin-bottom:${other.length?32:0}px;">${same.map(sitterCardHtml).join('')}</div>`;
-    }
-    if (other.length){
-      html += `<div class="eyebrow" style="margin-top:${same.length?0:4}px;">${same.length ? 'בייביסיטרים באזורים נוספים' : 'כל הבייביסיטרים'}</div>`;
-      html += `<div class="sitter-grid">${other.map(sitterCardHtml).join('')}</div>`;
-    }
-    wrap.innerHTML = html;
-    attachSitterCardHandlers(wrap, same.concat(other));
+  function populateNeighborhoodOptions(){
+    const citySel = document.getElementById('filter-city');
+    const neighSel = document.getElementById('filter-neighborhood');
+    const selectedCity = citySel.value;
+    const pool = selectedCity ? allSitters.filter(s => s.city === selectedCity) : allSitters;
+    const neighborhoods = Array.from(new Set(pool.map(s => (s.address||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'he'));
+    const prevValue = neighSel.value;
+    neighSel.innerHTML = '<option value="">כל השכונות</option>' + neighborhoods.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('');
+    neighSel.value = neighborhoods.includes(prevValue) ? prevValue : '';
+  }
+
+  function applyFeedFilters(){
+    const searchRaw = document.getElementById('sitter-search').value.trim();
+    const cityVal = document.getElementById('filter-city').value;
+    const neighVal = document.getElementById('filter-neighborhood').value;
+    const ageMinRaw = document.getElementById('filter-age-min').value;
+    const ageMaxRaw = document.getElementById('filter-age-max').value;
+    const ageMin = ageMinRaw === '' ? NaN : parseInt(ageMinRaw, 10);
+    const ageMax = ageMaxRaw === '' ? NaN : parseInt(ageMaxRaw, 10);
+    const consentVal = document.getElementById('filter-consent').value;
+    const terms = searchRaw ? expandSearchTerms(searchRaw) : null;
+
+    const filtered = allSitters.filter(s => {
+      if (terms){
+        const haystack = normalizeText([s.name, s.city, s.address].filter(Boolean).join(' '));
+        if (!terms.some(t => haystack.includes(t))) return false;
+      }
+      if (cityVal && s.city !== cityVal) return false;
+      if (neighVal && s.address !== neighVal) return false;
+      if (!isNaN(ageMin) || !isNaN(ageMax)){
+        if (!s.birth_date) return false;
+        const age = calculateAge(s.birth_date);
+        if (!isNaN(ageMin) && age < ageMin) return false;
+        if (!isNaN(ageMax) && age > ageMax) return false;
+      }
+      if (consentVal === 'yes' && !s.parental_consent) return false;
+      if (consentVal === 'no' && s.parental_consent) return false;
+      return true;
+    });
+
+    const eyebrow = document.getElementById('feed-count-eyebrow');
+    if (eyebrow) eyebrow.textContent = `${filtered.length} בייביסיטרים תואמים`;
+    paintSitterGrid(filtered);
   }
 
   function sitterCardHtml(s){
@@ -1168,7 +1239,7 @@ if (CONFIG_IS_PLACEHOLDER){
     }
     try {
       const ids = Array.from(favoriteSitterIds);
-      const { data, error } = await sb.from('profiles').select('*').in('id', ids);
+      const { data, error } = await sb.from('profiles').select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,role').in('id', ids);
       if (error) throw error;
       paintSitterGrid(data || []);
     } catch(err){
