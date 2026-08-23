@@ -757,11 +757,12 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="field">
             <label for="s-address">שכונת מגורים</label>
             <input type="text" id="s-address" placeholder="לדוגמה: שכונה ד'" value="${escapeAttr(d.address)}" required>
-            <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר.</div>
+            <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר. נא לרשום בעברית בלבד (שפות נוספות יתווספו בעתיד).</div>
           </div>
           <div class="field">
             <label for="s-city">עיר</label>
             <input type="text" id="s-city" placeholder="לדוגמה: באר שבע" value="${escapeAttr(d.city)}" required>
+            <div class="field-hint">נא לרשום בעברית בלבד — כך מנגנון החיפוש והסינון עובד הכי טוב.</div>
           </div>
           <div class="field">
             <label for="s-bio">קצת עליי (Bio)</label>
@@ -776,6 +777,9 @@ if (CONFIG_IS_PLACEHOLDER){
     if (isEditing){
       document.getElementById('sitter-cancel').onclick = () => { sitterViewMode = 'view'; route(); };
     }
+
+    restrictInputToHebrew(document.getElementById('s-city'));
+    restrictInputToHebrew(document.getElementById('s-address'));
 
     document.getElementById('photo-input').onchange = (e) => {
       const file = e.target.files[0];
@@ -969,11 +973,13 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="field">
             <label for="p-city">עיר מגורים</label>
             <input type="text" id="p-city" placeholder="לדוגמה: באר שבע" value="${escapeAttr(d.city)}" required>
+            <div class="field-hint">נא לרשום בעברית בלבד — כך מנגנון החיפוש והסינון עובד הכי טוב.</div>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="parent-name-submit">המשך</button>
         </form>
       </div>
     `, { hideNav:true });
+    restrictInputToHebrew(document.getElementById('p-city'));
     document.getElementById('parent-name-form').onsubmit = async (e) => {
       e.preventDefault();
       const errEl = document.getElementById('parent-name-error');
@@ -1007,13 +1013,18 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="eyebrow" id="feed-count-eyebrow">בייביסיטרים רשומים</div>
           <h1 class="page-title" style="margin-bottom:0;">בייביסיטרים באזור שלך</h1>
         </div>
-        <div class="search-box">
-          <input type="text" id="sitter-search" placeholder="חיפוש לפי שם...">
-          <span class="ic">⌕</span>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div class="search-box">
+            <input type="text" id="sitter-search" placeholder="חיפוש לפי שם...">
+            <span class="ic">⌕</span>
+          </div>
+          <button id="filter-toggle" aria-label="סינון" style="flex-shrink:0; width:46px; height:46px; border-radius:12px; background:var(--surface); border:1px solid var(--border); font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative;">
+            ⚙️<span id="filter-active-dot" style="display:none; position:absolute; top:6px; left:6px; width:8px; height:8px; border-radius:50%; background:var(--violet);"></span>
+          </button>
         </div>
       </div>
 
-      <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:24px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);">
+      <div id="filter-panel" style="display:none; flex-wrap:wrap; gap:12px; margin-bottom:24px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);">
         <div style="flex:1; min-width:130px;">
           <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">עיר</label>
           <select id="filter-city" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
@@ -1049,6 +1060,11 @@ if (CONFIG_IS_PLACEHOLDER){
 
       <div id="sitter-grid-wrap"><div class="page-loader"><div class="spinner"></div><span>טוען בייביסיטרים...</span></div></div>
     `);
+
+    document.getElementById('filter-toggle').onclick = () => {
+      const panel = document.getElementById('filter-panel');
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    };
 
     try {
       // fetch the sitter list and the parent's saved favorites in parallel (faster than doing them one after another),
@@ -1116,6 +1132,9 @@ if (CONFIG_IS_PLACEHOLDER){
     const ageMax = ageMaxRaw === '' ? NaN : parseInt(ageMaxRaw, 10);
     const consentVal = document.getElementById('filter-consent').value;
     const terms = searchRaw ? expandSearchTerms(searchRaw) : null;
+
+    const dot = document.getElementById('filter-active-dot');
+    if (dot) dot.style.display = (cityVal || neighVal || ageMinRaw !== '' || ageMaxRaw !== '' || consentVal) ? 'block' : 'none';
 
     const filtered = allSitters.filter(s => {
       if (terms){
@@ -1490,6 +1509,20 @@ if (CONFIG_IS_PLACEHOLDER){
   ];
   function normalizeText(s){
     return (s||'').toString().toLowerCase().replace(/['’\-]/g,'').replace(/\s+/g,' ').trim();
+  }
+  /* ---- while only Hebrew is supported (Arabic/English planned later), keep city/neighborhood
+         entries Hebrew-only so the search & filter matching stays reliable ---- */
+  const HEBREW_ONLY_PATTERN = /[^\u05D0-\u05EA0-9\s'׳"\-]/g;
+  function restrictInputToHebrew(el){
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const cleaned = el.value.replace(HEBREW_ONLY_PATTERN, '');
+      if (cleaned !== el.value){
+        const pos = el.selectionStart - (el.value.length - cleaned.length);
+        el.value = cleaned;
+        try { el.setSelectionRange(pos, pos); } catch(e){}
+      }
+    });
   }
   function expandSearchTerms(query){
     const nq = normalizeText(query);
