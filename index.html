@@ -408,6 +408,7 @@ function renderSetupNotice(){
   address text default '',
   city text default '',
   parental_consent boolean default false,
+  is_active boolean default true,
   created_at timestamptz default now()
 );
 
@@ -954,15 +955,29 @@ if (CONFIG_IS_PLACEHOLDER){
      ============================================================ */
   function renderSitterProfileView(){
     const d = currentDoc || {};
+    const isActive = d.is_active !== false;
     renderShell(`
       <div class="view-narrow">
         <div class="eyebrow">הפרופיל שלי</div>
         <h1 class="page-title">כך ההורים רואים אותך</h1>
         <p class="page-sub">זו התצוגה הציבורית של הפרופיל שלך בפיד להורים.</p>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 18px; margin-bottom:16px;">
+          <div>
+            <div style="font-weight:700; font-size:14.5px; margin-bottom:2px; color:${isActive ? 'var(--success)' : 'var(--danger)'};">
+              ${isActive ? '🟢 פעיל/ה — מופיע/ה להורים' : '⏸️ לא פעיל/ה — מוצג/ת כמושעה'}
+            </div>
+            <div style="font-size:12.5px; color:var(--text-muted);">${isActive ? 'הורים יכולים למצוא ולפנות אליך.' : 'הורים עדיין רואים את הפרופיל שלך, אבל עם סימון שאתה/את לא זמינ/ה כרגע.'}</div>
+          </div>
+          <button id="btn-toggle-active" class="btn ${isActive ? 'btn-ghost' : 'btn-primary'}" style="flex-shrink:0; padding:9px 16px; font-size:13.5px; white-space:nowrap;">
+            ${isActive ? 'הפוך ללא פעיל' : 'הפוך לפעיל'}
+          </button>
+        </div>
+
         <div id="fav-count-badge" style="display:inline-flex; align-items:center; gap:7px; background:var(--surface-2); border:1px solid var(--border); border-radius:100px; padding:7px 16px; font-size:13.5px; color:var(--text-muted); margin-bottom:16px;">
           <span class="spinner" style="width:13px;height:13px;border-width:2px;"></span> טוען...
         </div>
-        <div class="sitter-card" style="cursor:default;">
+        <div class="sitter-card" style="cursor:default; ${isActive ? '' : 'opacity:.6;'}">
           <div class="photo">${initials(d.name)}${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
             <h3>${escapeHtml(d.name)}</h3>
@@ -974,6 +989,22 @@ if (CONFIG_IS_PLACEHOLDER){
       </div>
     `);
     document.getElementById('btn-edit-profile').onclick = () => { sitterViewMode = 'edit'; route(); };
+
+    document.getElementById('btn-toggle-active').onclick = async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const newValue = !isActive;
+      try {
+        const { error } = await sb.from('profiles').update({ is_active: newValue }).eq('id', currentUser.id);
+        if (error) throw error;
+        currentDoc = { ...currentDoc, is_active: newValue };
+        toast(newValue ? 'הפרופיל שלך פעיל שוב!' : 'הפרופיל שלך סומן כלא פעיל.');
+        renderSitterProfileView();
+      } catch(err){
+        toast('העדכון נכשל: ' + (err?.message || 'שגיאה לא ידועה'), true);
+        btn.disabled = false;
+      }
+    };
 
     sb.from('favorites').select('parent_id', { count:'exact', head:true }).eq('sitter_id', currentUser.id)
       .then(({ count, error }) => {
@@ -1092,9 +1123,13 @@ if (CONFIG_IS_PLACEHOLDER){
           <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">מגיל</label>
           <input type="number" id="filter-age-min" min="14" max="100" placeholder="14" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
         </div>
-        <div style="min-width:85px;">
-          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">עד גיל</label>
-          <input type="number" id="filter-age-max" min="14" max="100" placeholder="100" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+        <div style="flex:1; min-width:140px;">
+          <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">סטטוס</label>
+          <select id="filter-status" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
+            <option value="">הכל</option>
+            <option value="active">פעילים בלבד</option>
+            <option value="inactive">לא פעילים בלבד</option>
+          </select>
         </div>
         <div style="flex:1; min-width:170px;">
           <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">אישור הורים</label>
@@ -1122,7 +1157,7 @@ if (CONFIG_IS_PLACEHOLDER){
       // and only request the columns the feed actually needs.
       const [sittersRes] = await Promise.all([
         sb.from('profiles')
-          .select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,role')
+          .select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,is_active,role')
           .eq('role', 'babysitter'),
         loadFavorites()
       ]);
@@ -1141,13 +1176,13 @@ if (CONFIG_IS_PLACEHOLDER){
     document.getElementById('filter-city').onchange = () => { populateNeighborhoodOptions(); applyFeedFilters(); };
     document.getElementById('filter-neighborhood').onchange = applyFeedFilters;
     document.getElementById('filter-age-min').oninput = applyFeedFilters;
-    document.getElementById('filter-age-max').oninput = applyFeedFilters;
+    document.getElementById('filter-status').onchange = applyFeedFilters;
     document.getElementById('filter-consent').onchange = applyFeedFilters;
     document.getElementById('filter-clear').onclick = () => {
       document.getElementById('sitter-search').value = '';
       document.getElementById('filter-city').value = '';
       document.getElementById('filter-age-min').value = '';
-      document.getElementById('filter-age-max').value = '';
+      document.getElementById('filter-status').value = '';
       document.getElementById('filter-consent').value = '';
       populateNeighborhoodOptions();
       applyFeedFilters();
@@ -1179,14 +1214,13 @@ if (CONFIG_IS_PLACEHOLDER){
     const cityVal = document.getElementById('filter-city').value;
     const neighVal = document.getElementById('filter-neighborhood').value;
     const ageMinRaw = document.getElementById('filter-age-min').value;
-    const ageMaxRaw = document.getElementById('filter-age-max').value;
     const ageMin = ageMinRaw === '' ? NaN : parseInt(ageMinRaw, 10);
-    const ageMax = ageMaxRaw === '' ? NaN : parseInt(ageMaxRaw, 10);
+    const statusVal = document.getElementById('filter-status').value;
     const consentVal = document.getElementById('filter-consent').value;
     const terms = searchRaw ? expandSearchTerms(searchRaw) : null;
 
     const dot = document.getElementById('filter-active-dot');
-    if (dot) dot.style.display = (cityVal || neighVal || ageMinRaw !== '' || ageMaxRaw !== '' || consentVal) ? 'block' : 'none';
+    if (dot) dot.style.display = (cityVal || neighVal || ageMinRaw !== '' || statusVal || consentVal) ? 'block' : 'none';
 
     const filtered = allSitters.filter(s => {
       if (terms){
@@ -1195,12 +1229,14 @@ if (CONFIG_IS_PLACEHOLDER){
       }
       if (cityVal && normalizeText(s.city) !== normalizeText(cityVal)) return false;
       if (neighVal && normalizeText(s.address) !== normalizeText(neighVal)) return false;
-      if (!isNaN(ageMin) || !isNaN(ageMax)){
+      if (!isNaN(ageMin)){
         if (!s.birth_date) return false;
         const age = calculateAge(s.birth_date);
-        if (!isNaN(ageMin) && age < ageMin) return false;
-        if (!isNaN(ageMax) && age > ageMax) return false;
+        if (age < ageMin) return false;
       }
+      const isActive = s.is_active !== false; // treat missing/null as active (older rows before this column existed)
+      if (statusVal === 'active' && !isActive) return false;
+      if (statusVal === 'inactive' && isActive) return false;
       if (consentVal === 'yes' && !s.parental_consent) return false;
       if (consentVal === 'no' && s.parental_consent) return false;
       return true;
@@ -1213,9 +1249,12 @@ if (CONFIG_IS_PLACEHOLDER){
 
   function sitterCardHtml(s){
     const isFav = favoriteSitterIds.has(s.id);
+    const isActive = s.is_active !== false;
     return `
-        <div class="sitter-card" data-uid="${s.id}">
-          <div class="badge-link"><span class="dot"></span>פרופיל פעיל</div>
+        <div class="sitter-card" data-uid="${s.id}" style="${isActive ? '' : 'opacity:.6;'}">
+          <div class="badge-link" style="${isActive ? '' : 'background:rgba(255,255,255,.9); border-color:rgba(220,38,38,.4); color:var(--danger);'}">
+            <span class="dot" style="${isActive ? '' : 'background:var(--danger);'}"></span>${isActive ? 'פרופיל פעיל' : 'מושעה זמנית'}
+          </div>
           <button class="fav-btn" data-fav-toggle="${s.id}" aria-label="שמירה למועדפים" style="position:absolute; top:12px; left:12px; background:#fff; border:1px solid var(--border); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.08);">${heartIconHtml(isFav)}</button>
           <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
@@ -1310,7 +1349,7 @@ if (CONFIG_IS_PLACEHOLDER){
     }
     try {
       const ids = Array.from(favoriteSitterIds);
-      const { data, error } = await sb.from('profiles').select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,role').in('id', ids);
+      const { data, error } = await sb.from('profiles').select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,is_active,role').in('id', ids);
       if (error) throw error;
       paintSitterGrid(data || []);
     } catch(err){
@@ -1328,10 +1367,12 @@ if (CONFIG_IS_PLACEHOLDER){
     const s = viewedSitter;
     if (!s){ currentView = 'main'; route(); return; }
     const isFav = favoriteSitterIds.has(s.id);
+    const isActive = s.is_active !== false;
     renderShell(`
       <div class="view-narrow" style="max-width:560px;">
         <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
-        <div class="modal" style="box-shadow:none; max-width:100%;">
+        ${!isActive ? `<div style="background:rgba(220,38,38,.08); border:1px solid rgba(220,38,38,.3); color:var(--danger); border-radius:12px; padding:12px 16px; font-size:13.5px; margin-bottom:14px;">⏸️ הבייביסיטר/ית הזה/ו סימן/ה את עצמו/ה כלא פעיל/ה כרגע — ייתכן שלא יגיב/תגיב לפניות בזמן הקרוב.</div>` : ''}
+        <div class="modal" style="box-shadow:none; max-width:100%; ${isActive ? '' : 'opacity:.7;'}">
           <div class="modal-photo">
             <button id="detail-fav-btn" aria-label="שמירה למועדפים" style="position:absolute; top:14px; right:14px; background:#fff; border:1px solid var(--border); width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.1);">${heartIconHtml(isFav)}</button>
             ${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}
