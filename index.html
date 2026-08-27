@@ -404,7 +404,6 @@ function renderSetupNotice(){
   phone text default '',
   bio text default '',
   photo_url text default '',
-  id_number text default '',
   birth_date date,
   address text default '',
   city text default '',
@@ -625,7 +624,7 @@ if (CONFIG_IS_PLACEHOLDER){
             if (data.user){
               const { error: insErr } = await sb.from('profiles').insert({
                 id: data.user.id, role: null, name:'', phone:'', bio:'', photo_url:'',
-                id_number:'', birth_date:null, address:'', city:''
+                birth_date:null, address:'', city:''
               });
               // ignore duplicate-row errors (e.g. row already created by a trigger)
               if (insErr && insErr.code !== '23505') throw insErr;
@@ -736,11 +735,6 @@ if (CONFIG_IS_PLACEHOLDER){
             <input type="tel" id="s-phone" placeholder="050-1234567" value="${escapeAttr(d.phone)}" required>
           </div>
           <div class="field">
-            <label for="s-id-number">תעודת זהות</label>
-            <input type="text" id="s-id-number" inputmode="numeric" placeholder="000000000" value="${escapeAttr(d.id_number)}" required>
-            <div class="field-hint">🔒 לשימוש פנימי לאימות זהות בלבד — לא יוצג להורים.</div>
-          </div>
-          <div class="field">
             <label for="s-birth-day">תאריך לידה</label>
             <div style="display:flex; gap:8px;">
               <select id="s-birth-day" required style="flex:1; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 8px; font-size:15px;"></select>
@@ -751,7 +745,7 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="field" id="consent-field" style="display:none; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px 16px;">
             <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin:0;">
               <input type="checkbox" id="s-parental-consent" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;">
-              <span style="font-size:13.5px; color:var(--text); line-height:1.5;">אני מאשר/ת כי קיבלתי את הסכמת ההורה/האפוטרופוס שלי להירשם כבייביסיטר באפליקציית בייבי-לינק, בהתאם לגילי.</span>
+              <span style="font-size:13.5px; color:var(--text); line-height:1.5;">אני מצהיר/ה כי הוריי או האפוטרופוס שלי מאשרים את השתתפותי באפליקציית בייבי-לינק, ואני מתחייב/ת להציג בפני ההורים שעבורם אני משמש/ת כבייביסיטר את אישור ההורים שלי, לפי דרישה. המשך השימוש כפוף לתנאי השימוש של האפליקציה.</span>
             </label>
           </div>
           <div class="field">
@@ -932,7 +926,6 @@ if (CONFIG_IS_PLACEHOLDER){
         const payload = {
           name: document.getElementById('s-name').value.trim(),
           phone: document.getElementById('s-phone').value.trim(),
-          id_number: document.getElementById('s-id-number').value.trim(),
           birth_date: birthDateStr,
           address: resolveSelectOrOther('s-address-select','s-address-other'),
           city: resolveSelectOrOther('s-city-select','s-city-other'),
@@ -1126,7 +1119,7 @@ if (CONFIG_IS_PLACEHOLDER){
 
     try {
       // fetch the sitter list and the parent's saved favorites in parallel (faster than doing them one after another),
-      // and only request the columns the feed actually needs — id_number is never sent to a parent's browser.
+      // and only request the columns the feed actually needs.
       const [sittersRes] = await Promise.all([
         sb.from('profiles')
           .select('id,name,phone,city,address,bio,photo_url,birth_date,parental_consent,role')
