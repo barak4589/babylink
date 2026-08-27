@@ -1246,7 +1246,7 @@ if (CONFIG_IS_PLACEHOLDER){
     const isFav = favoriteSitterIds.has(s.id);
     const isActive = s.is_active !== false;
     return `
-        <div class="sitter-card" data-uid="${s.id}" style="${isActive ? '' : 'opacity:.9; border:2px solid var(--danger);'}">
+        <div class="sitter-card" data-uid="${s.id}" style="${isActive ? '' : 'opacity:.9; border:1.5px solid var(--text-faint);'}">
           <div class="badge-link" style="${isActive ? '' : 'background:rgba(255,255,255,.9); border-color:rgba(220,38,38,.4); color:var(--danger);'}">
             <span class="dot" style="${isActive ? '' : 'background:var(--danger);'}"></span>${isActive ? 'פרופיל פעיל' : 'מושעה זמנית'}
           </div>
