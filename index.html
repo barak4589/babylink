@@ -528,25 +528,6 @@ if (CONFIG_IS_PLACEHOLDER){
   let unreadCount = 0;
   let viewedSitter = null;   // full profile data for the sitter detail page
   let favoriteSitterIds = new Set(); // sitter ids the current parent has saved (♥)
-  let navHistory = [];        // stack of previous view-states, for the "חזור" back button
-
-  function snapshotNav(){
-    return { currentView, viewedSitter, activeThreadUserId, activeThreadProfile, sitterViewMode };
-  }
-  function pushNav(){
-    navHistory.push(snapshotNav());
-    if (navHistory.length > 25) navHistory.shift();
-  }
-  function goBack(){
-    if (!navHistory.length) return;
-    const prev = navHistory.pop();
-    currentView = prev.currentView;
-    viewedSitter = prev.viewedSitter;
-    activeThreadUserId = prev.activeThreadUserId;
-    activeThreadProfile = prev.activeThreadProfile;
-    sitterViewMode = prev.sitterViewMode;
-    route();
-  }
 
   /* ============================================================
      3) SHELL / NAV
@@ -555,19 +536,14 @@ if (CONFIG_IS_PLACEHOLDER){
     const showNav = !!currentUser && !opts.hideNav;
     const role = currentDoc?.role;
     let navButtons = '';
-    const backBtn = navHistory.length
-      ? `<button class="btn btn-ghost" id="nav-back" style="padding:9px 16px;font-size:13.5px;">⏎ חזור</button>`
-      : '';
     if (showNav && role === 'babysitter' && currentDoc?.name){
       navButtons = `
-        ${backBtn}
         <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">הפרופיל שלי</button>
         <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
           הודעות ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}
         </button>`;
     } else if (showNav && role === 'parent' && currentDoc?.name){
       navButtons = `
-        ${backBtn}
         <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">בייביסיטרים</button>
         <button class="btn ${currentView==='favorites'?'btn-primary':'btn-ghost'}" id="nav-favorites" style="padding:9px 16px;font-size:13.5px;">❤️ מועדפים</button>
         <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
@@ -594,14 +570,12 @@ if (CONFIG_IS_PLACEHOLDER){
     `;
     if (showNav){
       document.getElementById('btn-signout').onclick = () => sb.auth.signOut();
-      const navBack = document.getElementById('nav-back');
       const navProfile = document.getElementById('nav-profile');
       const navMessages = document.getElementById('nav-messages');
       const navFavorites = document.getElementById('nav-favorites');
-      if (navBack) navBack.onclick = () => goBack();
-      if (navProfile) navProfile.onclick = () => { pushNav(); currentView='main'; sitterViewMode='view'; route(); };
-      if (navMessages) navMessages.onclick = () => { pushNav(); currentView='messages'; route(); };
-      if (navFavorites) navFavorites.onclick = () => { pushNav(); currentView='favorites'; route(); };
+      if (navProfile) navProfile.onclick = () => { currentView='main'; sitterViewMode='view'; route(); };
+      if (navMessages) navMessages.onclick = () => { currentView='messages'; route(); };
+      if (navFavorites) navFavorites.onclick = () => { currentView='favorites'; route(); };
     }
     if (showNav) refreshUnreadCount();
   }
@@ -1004,12 +978,12 @@ if (CONFIG_IS_PLACEHOLDER){
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 18px; margin-bottom:16px;">
           <div>
             <div style="font-weight:700; font-size:14.5px; margin-bottom:2px; color:${isActive ? 'var(--success)' : 'var(--danger)'};">
-              ${isActive ? '🟢 פעיל/ה — מופיע/ה להורים' : '⏸️ לא פעיל/ה — מוצג/ת כמושעה'}
+              ${isActive ? '🟢 זמין/ה — מופיע/ה להורים' : '⏸️ לא זמין/ה — מוצג/ת כמושעה'}
             </div>
             <div style="font-size:12.5px; color:var(--text-muted);">${isActive ? 'הורים יכולים למצוא ולפנות אליך.' : 'הורים עדיין רואים את הפרופיל שלך, אבל עם סימון שאתה/את לא זמינ/ה כרגע.'}</div>
           </div>
           <button id="btn-toggle-active" class="btn ${isActive ? 'btn-ghost' : 'btn-primary'}" style="flex-shrink:0; padding:9px 16px; font-size:13.5px; white-space:nowrap;">
-            ${isActive ? 'הפוך ללא פעיל' : 'הפוך לפעיל'}
+            ${isActive ? 'הפוך ללא זמין' : 'הפוך לזמין'}
           </button>
         </div>
 
@@ -1027,7 +1001,7 @@ if (CONFIG_IS_PLACEHOLDER){
         <button class="btn btn-primary btn-block" id="btn-edit-profile" style="margin-top:22px;">עריכת פרופיל</button>
       </div>
     `);
-    document.getElementById('btn-edit-profile').onclick = () => { pushNav(); sitterViewMode = 'edit'; route(); };
+    document.getElementById('btn-edit-profile').onclick = () => { sitterViewMode = 'edit'; route(); };
 
     document.getElementById('btn-toggle-active').onclick = async (e) => {
       const btn = e.currentTarget;
@@ -1037,7 +1011,7 @@ if (CONFIG_IS_PLACEHOLDER){
         const { error } = await sb.from('profiles').update({ is_active: newValue }).eq('id', currentUser.id);
         if (error) throw error;
         currentDoc = { ...currentDoc, is_active: newValue };
-        toast(newValue ? 'הפרופיל שלך פעיל שוב!' : 'הפרופיל שלך סומן כלא פעיל.');
+        toast(newValue ? 'הפרופיל שלך זמין שוב!' : 'הפרופיל שלך סומן כלא זמין.');
         renderSitterProfileView();
       } catch(err){
         toast('העדכון נכשל: ' + (err?.message || 'שגיאה לא ידועה'), true);
@@ -1166,8 +1140,8 @@ if (CONFIG_IS_PLACEHOLDER){
           <label style="display:block; font-size:12.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">סטטוס</label>
           <select id="filter-status" style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 10px; font-size:14px;">
             <option value="">הכל</option>
-            <option value="active">פעילים</option>
-            <option value="inactive">לא פעילים</option>
+            <option value="active">זמינים</option>
+            <option value="inactive">לא זמינים</option>
           </select>
         </div>
         <div style="flex:1; min-width:170px;">
@@ -1292,10 +1266,10 @@ if (CONFIG_IS_PLACEHOLDER){
     return `
         <div class="sitter-card" data-uid="${s.id}" style="${isActive ? '' : 'opacity:.9; border:1.5px solid var(--text-faint);'}">
           <div class="badge-link" style="${isActive ? '' : 'background:rgba(255,255,255,.9); border-color:rgba(220,38,38,.4); color:var(--danger);'}">
-            <span class="dot" style="${isActive ? '' : 'background:var(--danger);'}"></span>${isActive ? 'פרופיל פעיל' : 'מושעה זמנית'}
+            <span class="dot" style="${isActive ? '' : 'background:var(--danger);'}"></span>${isActive ? 'פרופיל זמין' : 'מושעה זמנית'}
           </div>
           <button class="fav-btn" data-fav-toggle="${s.id}" aria-label="שמירה למועדפים" style="position:absolute; top:12px; left:12px; background:#fff; border:1px solid var(--border); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.08);">${heartIconHtml(isFav)}</button>
-          ${isActive ? '' : `<div style="position:absolute; bottom:10px; left:10px; background:var(--danger); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:100px; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.15);">⏸️ לא פעיל כרגע</div>`}
+          ${isActive ? '' : `<div style="position:absolute; bottom:10px; left:10px; background:var(--danger); color:#fff; font-size:11px; font-weight:600; padding:4px 10px; border-radius:100px; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.15);">⏸️ לא זמין כרגע</div>`}
           <div class="photo">${initials(s.name)}${s.photo_url ? `<img src="${s.photo_url}" alt="${escapeAttr(s.name)}" onerror="this.remove()">` : ''}</div>
           <div class="body">
             <h3>${escapeHtml(s.name)}</h3>
@@ -1398,7 +1372,6 @@ if (CONFIG_IS_PLACEHOLDER){
   }
 
   function goToSitterDetail(s){
-    pushNav();
     viewedSitter = s;
     currentView = 'sitter-detail';
     route();
@@ -1412,7 +1385,7 @@ if (CONFIG_IS_PLACEHOLDER){
     renderShell(`
       <div class="view-narrow" style="max-width:560px;">
         <button class="btn btn-text" id="detail-back" style="padding:0 0 14px;">→ חזרה לרשימה</button>
-        ${!isActive ? `<div style="background:rgba(220,38,38,.08); border:1px solid rgba(220,38,38,.3); color:var(--danger); border-radius:12px; padding:12px 16px; font-size:13.5px; margin-bottom:14px;">⏸️ הבייביסיטר/ית הזה/ו סימן/ה את עצמו/ה כלא פעיל/ה כרגע — ייתכן שלא יגיב/תגיב לפניות בזמן הקרוב.</div>` : ''}
+        ${!isActive ? `<div style="background:rgba(220,38,38,.08); border:1px solid rgba(220,38,38,.3); color:var(--danger); border-radius:12px; padding:12px 16px; font-size:13.5px; margin-bottom:14px;">⏸️ הבייביסיטר/ית הזה/ו סימן/ה את עצמו/ה כלא זמין/ה כרגע — ייתכן שלא יגיב/תגיב לפניות בזמן הקרוב.</div>` : ''}
         <div class="modal" style="box-shadow:none; max-width:100%; ${isActive ? '' : 'opacity:.7;'}">
           <div class="modal-photo">
             <button id="detail-fav-btn" aria-label="שמירה למועדפים" style="position:absolute; top:14px; right:14px; background:#fff; border:1px solid var(--border); width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 2px 6px rgba(0,0,0,.1);">${heartIconHtml(isFav)}</button>
@@ -1433,7 +1406,7 @@ if (CONFIG_IS_PLACEHOLDER){
             </div>
             ${isActive
               ? `<button class="btn btn-ghost btn-block" id="detail-msg-btn" style="margin-top:10px;">✉️ שליחת הודעה באפליקציה</button>`
-              : `<button class="btn btn-ghost btn-block" disabled style="margin-top:10px;">✉️ לא ניתן ליצור קשר כרגע — הבייביסיטר/ית לא פעיל/ה</button>`}
+              : `<button class="btn btn-ghost btn-block" disabled style="margin-top:10px;">✉️ לא ניתן ליצור קשר כרגע — הבייביסיטר/ית לא זמין/ה</button>`}
           </div>
         </div>
       </div>
@@ -1441,7 +1414,6 @@ if (CONFIG_IS_PLACEHOLDER){
     document.getElementById('detail-back').onclick = () => { currentView = 'main'; route(); };
     if (isActive){
       document.getElementById('detail-msg-btn').onclick = () => {
-        pushNav();
         activeThreadUserId = s.id;
         activeThreadProfile = s;
         currentView = 'thread';
@@ -1532,7 +1504,6 @@ if (CONFIG_IS_PLACEHOLDER){
     wrap.querySelectorAll('[data-id]').forEach(el => {
       el.onclick = () => {
         const convo = convos.find(c => c.otherId === el.dataset.id);
-        pushNav();
         activeThreadUserId = convo.otherId;
         activeThreadProfile = convo.profile;
         currentView = 'thread';
