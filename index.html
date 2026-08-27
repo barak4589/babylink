@@ -768,20 +768,16 @@ if (CONFIG_IS_PLACEHOLDER){
             </label>
           </div>
           <div class="field">
-            <label for="s-city-select">עיר</label>
-            <select id="s-city-select" required style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 14px; font-size:15px;">
-              <option value="">בחרו עיר</option>
-            </select>
-            <input type="text" id="s-city-other" placeholder="הקלידו את שם העיר" style="display:none; margin-top:8px;">
-            <div class="field-hint">נא לרשום בעברית בלבד — כך מנגנון החיפוש והסינון עובד הכי טוב.</div>
+            <label for="s-city-input">עיר</label>
+            <input type="text" id="s-city-input" list="s-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
+            <datalist id="s-city-datalist"></datalist>
+            <div class="field-hint">התחילו להקליד ותופיע רשימת ערים — אפשר גם לרשום עיר שלא ברשימה. בעברית בלבד.</div>
           </div>
           <div class="field">
-            <label for="s-address-select">שכונת מגורים</label>
-            <select id="s-address-select" required style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 14px; font-size:15px;">
-              <option value="">בחרו קודם עיר</option>
-            </select>
-            <input type="text" id="s-address-other" placeholder="הקלידו את שם השכונה" style="display:none; margin-top:8px;">
-            <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר.</div>
+            <label for="s-address-input">שכונת מגורים</label>
+            <input type="text" id="s-address-input" list="s-address-datalist" placeholder="הקלידו לחיפוש שכונה..." value="${escapeAttr(d.address)}" required autocomplete="off">
+            <datalist id="s-address-datalist"></datalist>
+            <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר. אם השכונה שלכם לא ברשימה — פשוט הקלידו אותה.</div>
           </div>
           <div class="field">
             <label for="s-bio">קצת עליי (Bio)</label>
@@ -797,42 +793,18 @@ if (CONFIG_IS_PLACEHOLDER){
       document.getElementById('sitter-cancel').onclick = () => { sitterViewMode = 'view'; route(); };
     }
 
-    const sCitySelect = document.getElementById('s-city-select');
-    const sCityOther = document.getElementById('s-city-other');
-    const sAddressSelect = document.getElementById('s-address-select');
-    const sAddressOther = document.getElementById('s-address-other');
+    const sCityInput = document.getElementById('s-city-input');
+    const sAddressInput = document.getElementById('s-address-input');
 
-    populateCitySelect(sCitySelect, d.city);
-    const sCityIsOther = sCitySelect.value === '__other__';
-    sCityOther.style.display = sCityIsOther ? 'block' : 'none';
-    sCityOther.required = sCityIsOther;
-    if (sCityIsOther) sCityOther.value = d.city || '';
+    populateCityDatalist(document.getElementById('s-city-datalist'));
+    populateNeighborhoodDatalist(document.getElementById('s-address-datalist'), sCityInput.value);
 
-    populateNeighborhoodSelectForCity(sAddressSelect, sCityIsOther ? '' : sCitySelect.value, d.address);
-    const sAddressIsOther = sAddressSelect.value === '__other__';
-    sAddressOther.style.display = sAddressIsOther ? 'block' : 'none';
-    sAddressOther.required = sAddressIsOther;
-    if (sAddressIsOther) sAddressOther.value = d.address || '';
+    restrictInputToHebrew(sCityInput);
+    restrictInputToHebrew(sAddressInput);
 
-    restrictInputToHebrew(sCityOther);
-    restrictInputToHebrew(sAddressOther);
-
-    sCitySelect.onchange = () => {
-      const isOther = sCitySelect.value === '__other__';
-      sCityOther.style.display = isOther ? 'block' : 'none';
-      sCityOther.required = isOther;
-      if (!isOther) sCityOther.value = '';
-      populateNeighborhoodSelectForCity(sAddressSelect, isOther ? '' : sCitySelect.value, '');
-      sAddressOther.style.display = 'none';
-      sAddressOther.required = false;
-      sAddressOther.value = '';
-    };
-    sAddressSelect.onchange = () => {
-      const isOther = sAddressSelect.value === '__other__';
-      sAddressOther.style.display = isOther ? 'block' : 'none';
-      sAddressOther.required = isOther;
-      if (!isOther) sAddressOther.value = '';
-    };
+    sCityInput.addEventListener('input', () => {
+      populateNeighborhoodDatalist(document.getElementById('s-address-datalist'), sCityInput.value);
+    });
 
     document.getElementById('photo-input').onchange = (e) => {
       const file = e.target.files[0];
@@ -941,8 +913,8 @@ if (CONFIG_IS_PLACEHOLDER){
           name: document.getElementById('s-name').value.trim(),
           phone: document.getElementById('s-phone').value.trim(),
           birth_date: birthDateStr,
-          address: resolveSelectOrOther('s-address-select','s-address-other'),
-          city: resolveSelectOrOther('s-city-select','s-city-other'),
+          address: document.getElementById('s-address-input').value.trim(),
+          city: document.getElementById('s-city-input').value.trim(),
           bio: document.getElementById('s-bio').value.trim(),
           photo_url,
           parental_consent,
@@ -1048,32 +1020,19 @@ if (CONFIG_IS_PLACEHOLDER){
             <input type="text" id="p-name" placeholder="לדוגמה: דנה לוי" value="${escapeAttr(d.name)}" required>
           </div>
           <div class="field">
-            <label for="p-city-select">עיר מגורים</label>
-            <select id="p-city-select" required style="width:100%; background:var(--bg-soft); border:1px solid var(--border); color:var(--text); border-radius:11px; padding:12px 14px; font-size:15px;">
-              <option value="">בחרו עיר</option>
-            </select>
-            <input type="text" id="p-city-other" placeholder="הקלידו את שם העיר" style="display:none; margin-top:8px;">
-            <div class="field-hint">נא לרשום בעברית בלבד — כך מנגנון החיפוש והסינון עובד הכי טוב.</div>
+            <label for="p-city-input">עיר מגורים</label>
+            <input type="text" id="p-city-input" list="p-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
+            <datalist id="p-city-datalist"></datalist>
+            <div class="field-hint">התחילו להקליד ותופיע רשימת ערים — אפשר גם לרשום עיר שלא ברשימה. בעברית בלבד.</div>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="parent-name-submit">המשך</button>
         </form>
       </div>
     `, { hideNav:true });
 
-    const pCitySelect = document.getElementById('p-city-select');
-    const pCityOther = document.getElementById('p-city-other');
-    populateCitySelect(pCitySelect, d.city);
-    const pCityIsOther = pCitySelect.value === '__other__';
-    pCityOther.style.display = pCityIsOther ? 'block' : 'none';
-    pCityOther.required = pCityIsOther;
-    if (pCityIsOther) pCityOther.value = d.city || '';
-    restrictInputToHebrew(pCityOther);
-    pCitySelect.onchange = () => {
-      const isOther = pCitySelect.value === '__other__';
-      pCityOther.style.display = isOther ? 'block' : 'none';
-      pCityOther.required = isOther;
-      if (!isOther) pCityOther.value = '';
-    };
+    const pCityInput = document.getElementById('p-city-input');
+    populateCityDatalist(document.getElementById('p-city-datalist'));
+    restrictInputToHebrew(pCityInput);
 
     document.getElementById('parent-name-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -1081,7 +1040,7 @@ if (CONFIG_IS_PLACEHOLDER){
       const btn = document.getElementById('parent-name-submit');
       errEl.classList.remove('show');
       const name = document.getElementById('p-name').value.trim();
-      const city = resolveSelectOrOther('p-city-select','p-city-other');
+      const city = pCityInput.value.trim();
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
@@ -1622,43 +1581,93 @@ if (CONFIG_IS_PLACEHOLDER){
     ['אריאל','ariel'],
     ['גבעתיים','givatayim'],
     ['כרמיאל','karmiel','carmiel'],
+    ['נס ציונה','ness ziona','nes tziona'],
+    ['יבנה','yavne'],
+    ['אור יהודה','or yehuda'],
+    ['קריית אונו','kiryat ono','qiryat ono'],
+    ['קריית ביאליק','kiryat bialik','qiryat bialik'],
+    ['קריית ים','kiryat yam','qiryat yam'],
+    ['קריית מוצקין','kiryat motzkin','qiryat motzkin'],
+    ['קריית אתא','kiryat ata','qiryat ata'],
+    ['נשר','nesher'],
+    ['טירת כרמל','tirat carmel','tirat karmel'],
+    ['עכו','akko','acre'],
+    ['מגדל העמק','migdal haemek','migdal haemeq'],
+    ['נצרת','nazareth','natzrat'],
+    ['נצרת עילית','נוף הגליל','nof hagalil','nazareth illit'],
+    ['בית שאן','beit shean','bet shean'],
+    ['יקנעם','yokneam','yoqneam'],
+    ['זכרון יעקב','zichron yaakov','zikhron yaakov'],
+    ['בנימינה','binyamina'],
+    ['אור עקיבא','or akiva'],
+    ['חדרה','hadera'],
+    ['פרדס חנה כרכור','pardes hanna karkur'],
+    ['רמת השרון','ramat hasharon'],
+    ['הוד השרון','hod hasharon'],
+    ['רמות השבים','ramot hashavim'],
+    ['תל מונד','tel mond'],
+    ['כפר יונה','kfar yona'],
+    ['אלפי מנשה','alfei menashe'],
+    ['ראש העין','rosh haayin'],
+    ['אלעד','elad'],
+    ['גבעת שמואל','givat shmuel'],
+    ['יהוד','yehud','yehud-monosson'],
+    ['אזור','azor'],
+    ['באר יעקב','beer yaakov',"be'er yaakov"],
+    ['גדרה','gedera'],
+    ['קרית מלאכי','kiryat malachi','qiryat malachi'],
+    ['שוהם','shoham'],
+    ['מודיעין עילית','modiin illit'],
+    ['ביתר עילית','beitar illit'],
+    ['מעלה אדומים','maale adumim'],
+    ['רהט','rahat'],
+    ['תל שבע','tel sheva'],
+    ['לקיה','laqiya','lakiya'],
+    ['חורה','hura'],
+    ['שגב שלום','segev shalom'],
+    ['מצפה רמון','mitzpe ramon'],
+    ['קצרין','katzrin','qatzrin'],
+    ['צפת','tzfat','safed'],
+    ['עפרה','ofra'],
+    ['גבעת זאב','givat zeev'],
+    ['פרדסיה','pardesiya'],
+    ['גני תקווה','ganei tikva'],
+    ['סביון','savyon'],
   ];
 
   /* ---- fixed city list for registration dropdowns (Hebrew canonical names, reusing the alias list above) ---- */
   const CITIES = CITY_ALIASES.map(g => g[0]);
 
-  /* ---- known neighborhoods per city, for the dependent dropdown. Cities not listed here simply show "אחר". ---- */
+  /* ---- known neighborhoods per city, so the datalist offers real suggestions. Cities not listed here
+         still work fine — the field is free text, so any neighborhood name can be typed in. ---- */
   const NEIGHBORHOODS_BY_CITY = {
-    'באר שבע': ['שכונה א','שכונה ב','שכונה ג','שכונה ד','שכונה ה','שכונה ו','שכונה ז','שכונה ט','רמות','נאות לון','נווה זאב','נווה מנחם','המרכז','קריית הממשלה','העיר העתיקה'],
-    'תל אביב': ['פלורנטין','נווה צדק','לב העיר','רמת אביב','יפו','הצפון הישן','הצפון החדש','שכונת התקווה'],
-    'ירושלים': ['רחביה','קטמון','גילה','פסגת זאב','רמות','הר נוף','בית הכרם','העיר העתיקה'],
-    'חיפה': ['הדר','כרמל','נווה שאנן','קריית אליעזר','רמות רמז'],
-    'אשדוד': ['רובע א','רובע ב','רובע ג','רובע ד','רובע ה','רובע ו','רובע ז','רובע ח','מרינה'],
+    'באר שבע': ['שכונה א','שכונה ב','שכונה ג','שכונה ד','שכונה ה','שכונה ו','שכונה ז','שכונה ח','שכונה ט','שכונה יא','רמות','נאות לון','נווה זאב','נווה מנחם','נווה נוי','נווה אילן','שכונת אלף','המרכז','קריית הממשלה','העיר העתיקה','שכונת הסיטי','רמות ב\'','רמות ד\'','נחל בקע','נאות אברהם'],
+    'תל אביב': ['פלורנטין','נווה צדק','לב העיר','רמת אביב','רמת אביב ג\'','יפו','הצפון הישן','הצפון החדש','שכונת התקווה','כרם התימנים','נווה שאנן','שפירא','פלורנטין דרום','רמת החייל','נאות אפקה','מונטיפיורי','הצפון החדש','יד אליהו','אבו כביר','בבלי'],
+    'ירושלים': ['רחביה','קטמון','גילה','פסגת זאב','רמות','הר נוף','בית הכרם','העיר העתיקה','בקעה','טלביה','נחלאות','ארנונה','מלחה','גבעת שאול','רמת שרת','תלפיות','שכונת הבוכרים','מאה שערים','גבעת מרדכי'],
+    'חיפה': ['הדר','כרמל','נווה שאנן','קריית אליעזר','רמות רמז','כרמל צרפתי','כרמל מרכזי','אחוזה','רמת אלון','נשר','שכונת ואדי ניסנאס','קריית חיים','חליסה','דניה','רמת גולדה'],
+    'אשדוד': ['רובע א','רובע ב','רובע ג','רובע ד','רובע ה','רובע ו','רובע ז','רובע ח','רובע ט','רובע י','רובע יא','רובע יב','רובע יג','מרינה','נווה ים'],
+    'ראשון לציון': ['רמת אליהו','נווה ים','נחלת יהודה','שכונת הפארק','רמת החייל','משעולי אלון','שיכון המזרח','קריית גנים'],
+    'פתח תקווה': ['כפר גנים','אם המושבות','נווה גן','קריית מטלון','רמת ורבר','עין גנים','נווה עוז'],
+    'נתניה': ['קריית השרון','עיר ימים','נאות שקד','רמת פולג','נווה עוז','שכונת מרינה','קריית נורדאו','נוף ים'],
+    'רחובות': ['קריית משה','קריית ציון','נווה חן','רחובות המדע','גני אלונים','אושיות'],
+    'חולון': ['אגמים','קריית שרת','נווה רמז','שכונת תל גיבורים','גיבורי ישראל','ג\'סי כהן'],
+    'אשקלון': ['אפרידר','דרום א','דרום ב','שכונת שמשון','שכונה י','ברנע','נווה אילן'],
+    'רמת גן': ['שכונת מוצקין','אזור התעשייה','נווה יהושע','קריית קריניצי','שיכון ותיקים'],
+    'הרצליה': ['הרצליה פיתוח','נאות שדה','גני הדר','שכונת הצוק','נווה עמל'],
+    'כפר סבא': ['נווה זמר','דגניה','גני הדר','שיכון ותיקים'],
+    'רעננה': ['נווה זמר','אחוזה','כפר סבא ישנה','שיכוני המזרח'],
+    'באר יעקב': ['שכונת הפרחים','נווה חן'],
   };
 
-  function populateCitySelect(selectEl, currentValue){
-    selectEl.innerHTML = '<option value="">בחרו עיר</option>' +
-      CITIES.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('') +
-      '<option value="__other__">אחר</option>';
-    if (currentValue && CITIES.includes(currentValue)) selectEl.value = currentValue;
-    else if (currentValue) selectEl.value = '__other__';
-    else selectEl.value = '';
+  function populateCityDatalist(datalistEl){
+    datalistEl.innerHTML = CITIES.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
   }
 
-  function populateNeighborhoodSelectForCity(selectEl, city, currentValue){
-    const list = NEIGHBORHOODS_BY_CITY[city] || [];
-    selectEl.innerHTML = '<option value="">' + (city ? 'בחרו שכונה' : 'בחרו קודם עיר') + '</option>' +
-      list.map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('') +
-      '<option value="__other__">אחר</option>';
-    if (currentValue && list.includes(currentValue)) selectEl.value = currentValue;
-    else if (currentValue) selectEl.value = '__other__';
-    else selectEl.value = '';
-  }
-
-  function resolveSelectOrOther(selectId, otherId){
-    const sel = document.getElementById(selectId);
-    if (sel.value === '__other__') return document.getElementById(otherId).value.trim();
-    return sel.value;
+  function populateNeighborhoodDatalist(datalistEl, city){
+    const cityNorm = normalizeText(city);
+    let matchKey = Object.keys(NEIGHBORHOODS_BY_CITY).find(k => normalizeText(k) === cityNorm);
+    const list = matchKey ? NEIGHBORHOODS_BY_CITY[matchKey] : [];
+    datalistEl.innerHTML = list.map(n => `<option value="${escapeAttr(n)}"></option>`).join('');
   }
 
   function normalizeText(s){
