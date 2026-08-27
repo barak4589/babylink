@@ -172,6 +172,22 @@ h1.page-title{
 .field textarea{ resize:vertical; min-height:96px; }
 .field-hint{ font-size:12.5px; color:var(--text-muted); font-weight:600; margin-top:6px; }
 
+/* ---------- Custom styled autocomplete (replaces the unstylable native <datalist>) ---------- */
+.ac-wrap{ position:relative; }
+.ac-dropdown{
+  display:none; position:absolute; top:calc(100% + 6px); right:0; left:0; z-index:50;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); max-height:260px; overflow-y:auto; padding:6px;
+}
+.ac-dropdown.open{ display:block; }
+.ac-item{
+  padding:10px 14px; border-radius:9px; font-size:14.5px; color:var(--text);
+  cursor:pointer; transition:background .1s ease;
+}
+.ac-item:hover, .ac-item.ac-active{ background:var(--surface-2); color:var(--violet-deep); }
+.ac-item mark{ background:transparent; color:var(--violet); font-weight:700; }
+.ac-empty{ padding:10px 14px; font-size:13px; color:var(--text-faint); }
+
 .tab-switch{
   display:flex; background:var(--bg-soft); border:1px solid var(--border);
   border-radius:12px; padding:4px; margin-bottom:24px;
@@ -773,14 +789,12 @@ if (CONFIG_IS_PLACEHOLDER){
           </div>
           <div class="field">
             <label for="s-city-input">עיר</label>
-            <input type="text" id="s-city-input" list="s-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
-            <datalist id="s-city-datalist"></datalist>
+            <input type="text" id="s-city-input" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
             <div class="field-hint">התחילו להקליד ותופיע רשימת ערים — אפשר גם לרשום עיר שלא ברשימה. בעברית בלבד.</div>
           </div>
           <div class="field">
             <label for="s-address-input">שכונת מגורים</label>
-            <input type="text" id="s-address-input" list="s-address-datalist" placeholder="הקלידו לחיפוש שכונה..." value="${escapeAttr(d.address)}" required autocomplete="off">
-            <datalist id="s-address-datalist"></datalist>
+            <input type="text" id="s-address-input" placeholder="הקלידו לחיפוש שכונה..." value="${escapeAttr(d.address)}" required autocomplete="off">
             <div class="field-hint">השכונה תוצג להורים בפרופיל הציבורי, יחד עם העיר. אם השכונה שלכם לא ברשימה — פשוט הקלידו אותה.</div>
           </div>
           <div class="field">
@@ -800,15 +814,11 @@ if (CONFIG_IS_PLACEHOLDER){
     const sCityInput = document.getElementById('s-city-input');
     const sAddressInput = document.getElementById('s-address-input');
 
-    populateCityDatalist(document.getElementById('s-city-datalist'));
-    populateNeighborhoodDatalist(document.getElementById('s-address-datalist'), sCityInput.value);
-
     restrictInputToHebrew(sCityInput);
     restrictInputToHebrew(sAddressInput);
 
-    sCityInput.addEventListener('input', () => {
-      populateNeighborhoodDatalist(document.getElementById('s-address-datalist'), sCityInput.value);
-    });
+    setupAutocomplete(sCityInput, () => CITIES);
+    setupAutocomplete(sAddressInput, () => neighborhoodsForCity(sCityInput.value));
 
     document.getElementById('photo-input').onchange = (e) => {
       const file = e.target.files[0];
@@ -1025,8 +1035,7 @@ if (CONFIG_IS_PLACEHOLDER){
           </div>
           <div class="field">
             <label for="p-city-input">עיר מגורים</label>
-            <input type="text" id="p-city-input" list="p-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
-            <datalist id="p-city-datalist"></datalist>
+            <input type="text" id="p-city-input" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
             <div class="field-hint">התחילו להקליד ותופיע רשימת ערים — אפשר גם לרשום עיר שלא ברשימה. בעברית בלבד.</div>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="parent-name-submit">המשך</button>
@@ -1035,8 +1044,8 @@ if (CONFIG_IS_PLACEHOLDER){
     `, { hideNav:true });
 
     const pCityInput = document.getElementById('p-city-input');
-    populateCityDatalist(document.getElementById('p-city-datalist'));
     restrictInputToHebrew(pCityInput);
+    setupAutocomplete(pCityInput, () => CITIES);
 
     document.getElementById('parent-name-form').onsubmit = async (e) => {
       e.preventDefault();
@@ -1113,13 +1122,11 @@ if (CONFIG_IS_PLACEHOLDER){
           </div>
           <div class="field">
             <label for="pp-city-input">עיר מגורים</label>
-            <input type="text" id="pp-city-input" list="pp-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
-            <datalist id="pp-city-datalist"></datalist>
+            <input type="text" id="pp-city-input" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
           </div>
           <div class="field">
             <label for="pp-address-input">שכונת מגורים</label>
-            <input type="text" id="pp-address-input" list="pp-address-datalist" placeholder="הקלידו לחיפוש שכונה... (אופציונלי)" value="${escapeAttr(d.address)}" autocomplete="off">
-            <datalist id="pp-address-datalist"></datalist>
+            <input type="text" id="pp-address-input" placeholder="הקלידו לחיפוש שכונה... (אופציונלי)" value="${escapeAttr(d.address)}" autocomplete="off">
             <div class="field-hint">אופציונלי — אם תמלאו, זה יעזור לבייביסיטרים להבין באיזה אזור אתם.</div>
           </div>
           <button type="submit" class="btn btn-primary btn-block" id="pp-submit">שמירת שינויים</button>
@@ -1130,13 +1137,10 @@ if (CONFIG_IS_PLACEHOLDER){
 
     const ppCityInput = document.getElementById('pp-city-input');
     const ppAddressInput = document.getElementById('pp-address-input');
-    populateCityDatalist(document.getElementById('pp-city-datalist'));
-    populateNeighborhoodDatalist(document.getElementById('pp-address-datalist'), ppCityInput.value);
     restrictInputToHebrew(ppCityInput);
     restrictInputToHebrew(ppAddressInput);
-    ppCityInput.addEventListener('input', () => {
-      populateNeighborhoodDatalist(document.getElementById('pp-address-datalist'), ppCityInput.value);
-    });
+    setupAutocomplete(ppCityInput, () => CITIES);
+    setupAutocomplete(ppAddressInput, () => neighborhoodsForCity(ppCityInput.value));
 
     document.getElementById('pp-photo-input').onchange = (e) => {
       const file = e.target.files[0];
@@ -1789,17 +1793,112 @@ if (CONFIG_IS_PLACEHOLDER){
     'כפר סבא': ['נווה זמר','דגניה','גני הדר','שיכון ותיקים'],
     'רעננה': ['נווה זמר','אחוזה','כפר סבא ישנה','שיכוני המזרח'],
     'באר יעקב': ['שכונת הפרחים','נווה חן'],
+    'אילת': ['שחמון','שייח\' חוסיין','רואי','גני שולמית','טירת גיא','גני איילות'],
+    'עכו': ['העיר העתיקה','נאות גינתון','כפר מסריק','גיבורי ישראל'],
+    'נהריה': ['הדר', 'שכונת גורדון','נאות גליל'],
+    'צפת': ['כנען','העיר העתיקה','רמת רזים'],
+    'טבריה': ['קריית שמואל','העיר העתיקה','רימונים','דונה גרציה'],
+    'עפולה': ['רמת יוסף','גבעת המורה','עפולה עילית'],
+    'בית שאן': ['שכונת עמל','רמת הדר'],
+    'קריית שמונה': ['שכונת דרך הים','נווה עמי'],
+    'דימונה': ['שכונת נחל עוז','גבעה הצרפתית'],
+    'ערד': ['שכונה א\'','שכונה ד\'','נווה זוהר'],
+    'אופקים': ['שכונה ב\'','שכונה ד\''],
+    'שדרות': ['נווה עוז','שכונת מרכז'],
+    'נתיבות': ['רמת אילן','שכונת נאות'],
+    'רהט': ['שכונה 1','שכונה 5','שכונה 10'],
+    'מודיעין עילית': ['אחיסמך','קרית ספר'],
+    'מעלה אדומים': ['גבעת סלעית','נופי אדומים','מרכז העיר'],
+    'ביתר עילית': ['רמת בית שמש','נחלה ומנוחה'],
+    'בית שמש': ['רמה א\'','רמה ב\'','רמה ג\'','נווה שמיר'],
+    'חדרה': ['נווה חיים','גבעת אולגה','נווה יוסף'],
+    'הוד השרון': ['גני הדר','רמת הדר','מגדיאל'],
+    'רמת השרון': ['מורשה','נאות רמת השרון'],
+    'ראש העין': ['רמת השחר','נווה זמר'],
+    'אלעד': ['שכונת נווה אילן','רמת אלעד'],
+    'יבנה': ['נאות רבין','גבעת יונה'],
+    'נס ציונה': ['שכונת נווה עוז','גבעת חן'],
+    'גדרה': ['גבעת ברנר','שכונת הדרים'],
+    'קריית גת': ['שכונה 3','שכונה 5','גני הדר'],
+    'קרית מלאכי': ['שכונת הרצל','שכונת רמז'],
+    'יקנעם': ['יקנעם עילית','יקנעם המושבה'],
+    'זכרון יעקב': ['רמת הנדיב','מרכז המושבה'],
+    'קריית אתא': ['רמת אלון','גבעת רבין'],
+    'קריית ביאליק': ['נאות גולן','שכונת ותיקים'],
+    'קריית ים': ['שכונת ים','רמת הים'],
+    'קריית מוצקין': ['גבעת זאב','נווה גנים'],
+    'טירת כרמל': ['רמת אלון','שכונת החורש'],
   };
 
-  function populateCityDatalist(datalistEl){
-    datalistEl.innerHTML = CITIES.map(c => `<option value="${escapeAttr(c)}"></option>`).join('');
+  function neighborhoodsForCity(city){
+    const cityNorm = normalizeText(city);
+    const matchKey = Object.keys(NEIGHBORHOODS_BY_CITY).find(k => normalizeText(k) === cityNorm);
+    return matchKey ? NEIGHBORHOODS_BY_CITY[matchKey] : [];
   }
 
-  function populateNeighborhoodDatalist(datalistEl, city){
-    const cityNorm = normalizeText(city);
-    let matchKey = Object.keys(NEIGHBORHOODS_BY_CITY).find(k => normalizeText(k) === cityNorm);
-    const list = matchKey ? NEIGHBORHOODS_BY_CITY[matchKey] : [];
-    datalistEl.innerHTML = list.map(n => `<option value="${escapeAttr(n)}"></option>`).join('');
+  /* ---- custom-styled autocomplete: replaces the native <datalist>, which cannot be styled ----
+     inputEl: the text input · getOptions: () => string[] (called fresh on every keystroke, so
+     dependent lists like "neighborhoods for the currently-typed city" stay in sync) · onPick:
+     optional callback fired after the user picks a suggestion (e.g. to refresh a dependent field) */
+  function setupAutocomplete(inputEl, getOptions, onPick){
+    const wrap = document.createElement('div');
+    wrap.className = 'ac-wrap';
+    inputEl.parentNode.insertBefore(wrap, inputEl);
+    wrap.appendChild(inputEl);
+    const dropdown = document.createElement('div');
+    dropdown.className = 'ac-dropdown';
+    wrap.appendChild(dropdown);
+
+    let items = [];
+    let activeIndex = -1;
+
+    function highlightMatch(text, query){
+      if (!query) return escapeHtml(text);
+      const idx = normalizeText(text).indexOf(query);
+      if (idx === -1) return escapeHtml(text);
+      // map the normalized-match index back onto the original (unnormalized) string as closely as possible
+      return escapeHtml(text.slice(0, idx)) + '<mark>' + escapeHtml(text.slice(idx, idx+query.length)) + '</mark>' + escapeHtml(text.slice(idx+query.length));
+    }
+
+    function render(){
+      const q = normalizeText(inputEl.value);
+      const all = getOptions();
+      items = q ? all.filter(o => normalizeText(o).includes(q)) : all;
+      items = items.slice(0, 8);
+      activeIndex = -1;
+      if (!items.length){
+        dropdown.innerHTML = q ? `<div class="ac-empty">אין הצעות תואמות — אפשר להמשיך להקליד ולשמור כטקסט חופשי.</div>` : '';
+        dropdown.classList.toggle('open', !!q);
+        return;
+      }
+      dropdown.innerHTML = items.map((it,i) => `<div class="ac-item" data-i="${i}">${highlightMatch(it, q)}</div>`).join('');
+      dropdown.classList.add('open');
+      dropdown.querySelectorAll('.ac-item').forEach(el => {
+        el.onmousedown = (e) => { e.preventDefault(); pick(+el.dataset.i); };
+      });
+    }
+    function pick(i){
+      if (!items[i]) return;
+      inputEl.value = items[i];
+      dropdown.classList.remove('open');
+      inputEl.dispatchEvent(new Event('input', { bubbles:true }));
+      if (onPick) onPick(items[i]);
+    }
+    function close(){ dropdown.classList.remove('open'); }
+
+    inputEl.addEventListener('input', render);
+    inputEl.addEventListener('focus', render);
+    inputEl.addEventListener('keydown', (e) => {
+      if (!dropdown.classList.contains('open')) return;
+      if (e.key === 'ArrowDown'){ e.preventDefault(); activeIndex = Math.min(activeIndex+1, items.length-1); updateActive(); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); activeIndex = Math.max(activeIndex-1, 0); updateActive(); }
+      else if (e.key === 'Enter'){ if (activeIndex>=0){ e.preventDefault(); pick(activeIndex); } }
+      else if (e.key === 'Escape'){ close(); }
+    });
+    function updateActive(){
+      dropdown.querySelectorAll('.ac-item').forEach((el,i) => el.classList.toggle('ac-active', i===activeIndex));
+    }
+    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
   }
 
   function normalizeText(s){
