@@ -746,7 +746,7 @@ if (CONFIG_IS_PLACEHOLDER){
           <div class="field" id="consent-field" style="display:none; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px 16px;">
             <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin:0;">
               <input type="checkbox" id="s-parental-consent" style="margin-top:3px; width:17px; height:17px; flex-shrink:0;">
-              <span style="font-size:13.5px; color:var(--text); line-height:1.5;">אני מצהיר/ה כי הוריי או האפוטרופוס שלי מאשרים את השתתפותי באפליקציית בייבי-לינק, ואני מתחייב/ת להציג בפני ההורים שעבורם אני משמש/ת כבייביסיטר את אישור ההורים שלי, לפי דרישה. המשך השימוש כפוף לתנאי השימוש של האפליקציה.</span>
+              <span style="font-size:13.5px; color:var(--text); line-height:1.5;">אני מתחייב/ת להצהיר בפני ההורים שעבורם אני משמש/ת כבייביסיטר על אישור ההורים שלי.</span>
             </label>
           </div>
           <div class="field">
@@ -863,7 +863,7 @@ if (CONFIG_IS_PLACEHOLDER){
         consentField.style.display = 'none'; consentCheckbox.required = false; return;
       }
       const age = calculateAge(dateStr);
-      if (age >= 14 && age < 16){
+      if (age < 16){
         consentField.style.display = 'block';
         consentCheckbox.required = true;
       } else {
@@ -895,14 +895,9 @@ if (CONFIG_IS_PLACEHOLDER){
         return;
       }
 
-      /* ---- age gate: under 14 blocked · under 16 (e.g. 14–15.9) requires parental consent checkbox · 16+ proceeds normally ---- */
+      /* ---- age gate: registration is allowed at any age · under 16 requires parental consent checkbox · 16+ proceeds normally ---- */
       const age = calculateAge(birthDateStr);
       let parental_consent = false;
-      if (age < 14){
-        errEl.textContent = '🚫 לא ניתן להירשם לבייבי-לינק מתחת לגיל 14.';
-        errEl.classList.add('show');
-        return;
-      }
       if (age < 16){
         if (!consentCheckbox.checked){
           errEl.textContent = '👨‍👩‍👧 מתחת לגיל 16 יש לאשר את תיבת הסכמת ההורים לפני ההרשמה.';
