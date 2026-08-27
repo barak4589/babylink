@@ -523,6 +523,7 @@ if (CONFIG_IS_PLACEHOLDER){
   let pendingPhotoFile = null;
   let currentView = 'main';       // 'main' | 'messages' | 'thread' | 'favorites'
   let sitterViewMode = 'view';    // 'view' | 'edit' — only relevant once a babysitter profile is complete
+  let parentProfileMode = 'view'; // 'view' | 'edit' — for the parent's own profile screen
   let activeThreadUserId = null;
   let activeThreadProfile = null;
   let unreadCount = 0;
@@ -545,6 +546,7 @@ if (CONFIG_IS_PLACEHOLDER){
     } else if (showNav && role === 'parent' && currentDoc?.name){
       navButtons = `
         <button class="btn ${currentView==='main'?'btn-primary':'btn-ghost'}" id="nav-profile" style="padding:9px 16px;font-size:13.5px;">בייביסיטרים</button>
+        <button class="btn ${currentView==='parent-profile'?'btn-primary':'btn-ghost'}" id="nav-parent-profile" style="padding:9px 16px;font-size:13.5px;">הפרופיל שלי</button>
         <button class="btn ${currentView==='favorites'?'btn-primary':'btn-ghost'}" id="nav-favorites" style="padding:9px 16px;font-size:13.5px;">❤️ מועדפים</button>
         <button class="btn ${currentView==='messages'||currentView==='thread'?'btn-primary':'btn-ghost'}" id="nav-messages" style="padding:9px 16px;font-size:13.5px;position:relative;">
           ההודעות שלי ${unreadCount>0 ? `<span style="background:var(--danger);color:#fff;border-radius:100px;padding:1px 7px;font-size:11px;margin-inline-start:5px;">${unreadCount}</span>` : ''}
@@ -573,9 +575,11 @@ if (CONFIG_IS_PLACEHOLDER){
       const navProfile = document.getElementById('nav-profile');
       const navMessages = document.getElementById('nav-messages');
       const navFavorites = document.getElementById('nav-favorites');
+      const navParentProfile = document.getElementById('nav-parent-profile');
       if (navProfile) navProfile.onclick = () => { currentView='main'; sitterViewMode='view'; route(); };
       if (navMessages) navMessages.onclick = () => { currentView='messages'; route(); };
       if (navFavorites) navFavorites.onclick = () => { currentView='favorites'; route(); };
+      if (navParentProfile) navParentProfile.onclick = () => { currentView='parent-profile'; parentProfileMode='view'; route(); };
     }
     if (showNav) refreshUnreadCount();
   }
@@ -1053,6 +1057,134 @@ if (CONFIG_IS_PLACEHOLDER){
         errEl.classList.add('show');
         btn.disabled = false;
         btn.textContent = 'המשך';
+      }
+    };
+  }
+
+  /* ============================================================
+     6d) PARENT — OWN PROFILE VIEW + EDIT
+     ============================================================ */
+  function renderParentProfileView(){
+    const d = currentDoc || {};
+    renderShell(`
+      <div class="view-narrow">
+        <div class="eyebrow">הפרופיל שלי</div>
+        <h1 class="page-title">הפרטים שלך</h1>
+        <p class="page-sub">כאן אפשר לראות ולעדכן את פרטי החשבון שלך.</p>
+        <div class="sitter-card" style="cursor:default; display:flex; flex-direction:row; align-items:center; gap:16px; padding:18px;">
+          <div class="photo-preview" style="width:64px; height:64px; font-size:20px; flex-shrink:0;">
+            ${initials(d.name)}${d.photo_url ? `<img src="${d.photo_url}" alt="${escapeAttr(d.name)}" onerror="this.remove()">` : ''}
+          </div>
+          <div style="flex:1;">
+            <h3 style="margin-bottom:4px;">${escapeHtml(d.name)}</h3>
+            <div class="loc">📍 ${escapeHtml([d.city, d.address].filter(Boolean).join(', ')) || 'לא צוין'}</div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-edit-parent-profile" style="margin-top:22px;">עריכת פרופיל</button>
+      </div>
+    `);
+    document.getElementById('btn-edit-parent-profile').onclick = () => { parentProfileMode = 'edit'; route(); };
+  }
+
+  function renderParentProfileEdit(){
+    const d = currentDoc || {};
+    pendingPhotoFile = null;
+    renderShell(`
+      <div class="view-narrow">
+        <div class="eyebrow">עריכת פרופיל</div>
+        <h1 class="page-title">עריכת הפרטים שלך</h1>
+
+        <div class="photo-upload">
+          <div class="photo-preview" id="pp-photo-preview">📷${d.photo_url ? `<img src="${d.photo_url}" alt="" onerror="this.remove()">` : ''}</div>
+          <div class="photo-upload-actions">
+            <div class="btn btn-ghost file-btn">
+              בחירת תמונת פרופיל
+              <input type="file" accept="image/*" id="pp-photo-input">
+            </div>
+            <span class="field-hint">JPG או PNG, עד 5MB</span>
+          </div>
+        </div>
+
+        <div class="form-error" id="pp-error"></div>
+        <form id="pp-form">
+          <div class="field">
+            <label for="pp-name">שם מלא</label>
+            <input type="text" id="pp-name" value="${escapeAttr(d.name)}" required>
+          </div>
+          <div class="field">
+            <label for="pp-city-input">עיר מגורים</label>
+            <input type="text" id="pp-city-input" list="pp-city-datalist" placeholder="הקלידו לחיפוש עיר..." value="${escapeAttr(d.city)}" required autocomplete="off">
+            <datalist id="pp-city-datalist"></datalist>
+          </div>
+          <div class="field">
+            <label for="pp-address-input">שכונת מגורים</label>
+            <input type="text" id="pp-address-input" list="pp-address-datalist" placeholder="הקלידו לחיפוש שכונה... (אופציונלי)" value="${escapeAttr(d.address)}" autocomplete="off">
+            <datalist id="pp-address-datalist"></datalist>
+            <div class="field-hint">אופציונלי — אם תמלאו, זה יעזור לבייביסיטרים להבין באיזה אזור אתם.</div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="pp-submit">שמירת שינויים</button>
+          <button type="button" class="btn btn-ghost btn-block" id="pp-cancel" style="margin-top:10px;">ביטול</button>
+        </form>
+      </div>
+    `);
+
+    const ppCityInput = document.getElementById('pp-city-input');
+    const ppAddressInput = document.getElementById('pp-address-input');
+    populateCityDatalist(document.getElementById('pp-city-datalist'));
+    populateNeighborhoodDatalist(document.getElementById('pp-address-datalist'), ppCityInput.value);
+    restrictInputToHebrew(ppCityInput);
+    restrictInputToHebrew(ppAddressInput);
+    ppCityInput.addEventListener('input', () => {
+      populateNeighborhoodDatalist(document.getElementById('pp-address-datalist'), ppCityInput.value);
+    });
+
+    document.getElementById('pp-photo-input').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 5*1024*1024){ toast('הקובץ גדול מדי (מקסימום 5MB)', true); return; }
+      pendingPhotoFile = file;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        document.getElementById('pp-photo-preview').innerHTML = `<img src="${ev.target.result}" alt="">`;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    document.getElementById('pp-cancel').onclick = () => { parentProfileMode = 'view'; route(); };
+
+    document.getElementById('pp-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('pp-error');
+      const btn = document.getElementById('pp-submit');
+      errEl.classList.remove('show');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        let photo_url = d.photo_url || '';
+        if (pendingPhotoFile){
+          const path = `${currentUser.id}.jpg`;
+          const { error: upErr } = await sb.storage.from('avatars').upload(path, pendingPhotoFile, { upsert:true, contentType: pendingPhotoFile.type || 'image/jpeg' });
+          if (upErr) throw upErr;
+          const { data: pub } = sb.storage.from('avatars').getPublicUrl(path);
+          photo_url = pub.publicUrl + '?t=' + Date.now();
+        }
+        const payload = {
+          name: document.getElementById('pp-name').value.trim(),
+          city: ppCityInput.value.trim(),
+          address: ppAddressInput.value.trim(),
+          photo_url
+        };
+        const { error } = await sb.from('profiles').update(payload).eq('id', currentUser.id);
+        if (error) throw error;
+        currentDoc = { ...currentDoc, ...payload };
+        parentProfileMode = 'view';
+        toast('הפרופיל עודכן בהצלחה!');
+        route();
+      } catch(err){
+        errEl.textContent = 'השמירה נכשלה: ' + (err?.message || 'שגיאה לא ידועה');
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'שמירת שינויים';
       }
     };
   }
@@ -1739,6 +1871,10 @@ if (CONFIG_IS_PLACEHOLDER){
     if (currentView === 'thread'){ renderMessageThread(); return; }
     if (currentView === 'sitter-detail'){ renderSitterDetailPage(); return; }
     if (currentView === 'favorites'){ renderFavoritesView(); return; }
+    if (currentView === 'parent-profile'){
+      if (parentProfileMode === 'edit'){ renderParentProfileEdit(); } else { renderParentProfileView(); }
+      return;
+    }
 
     if (currentDoc.role === 'babysitter'){
       if (sitterViewMode === 'edit'){ renderSitterForm(); } else { renderSitterProfileView(); }
